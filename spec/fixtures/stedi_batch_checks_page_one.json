@@ -1,0 +1,38 @@
+{
+  "items": [
+    {
+      "state": "COMPLETED",
+      "additionalInfo": {
+        "eligibility": {
+          "submitterTransactionIdentifier": "member-7087",
+          "eligibilityCheckResult": "ACTIVE",
+          "payerId": "11111",
+          "subscriberMemberId": "MOCK00000001",
+          "subscriberFirstName": "Testfirst",
+          "subscriberLastName": "Testlast"
+        }
+      }
+    },
+    {
+      "state": "COMPLETED",
+      "additionalInfo": {
+        "eligibility": {
+          "submitterTransactionIdentifier": "member-7091",
+          "eligibilityCheckResult": "INACTIVE",
+          "payerId": "11111",
+          "subscriberMemberId": "MOCK00000002"
+        }
+      }
+    },
+    {
+      "state": "RETRYING",
+      "additionalInfo": {
+        "eligibility": {
+          "submitterTransactionIdentifier": "member-7154",
+          "payerId": "11111"
+        }
+      }
+    }
+  ],
+  "nextPageToken": "eyJwYWdlIjoyfQ"
+}

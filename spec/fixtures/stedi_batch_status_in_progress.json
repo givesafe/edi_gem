@@ -1,0 +1,16 @@
+{
+  "id": "01JB7Q2F3K8N4X5Y6Z7A8B9C0D",
+  "name": "monthly refresh",
+  "batchType": "ELIGIBILITY",
+  "source": "API",
+  "status": "IN_PROGRESS",
+  "totalCount": 4,
+  "validatedCount": 4,
+  "validationFailedCount": 0,
+  "successCount": 2,
+  "errorCount": 1,
+  "inProgressCount": 1,
+  "maxRetryHours": 8,
+  "createdAt": "2026-09-11T04:12:33.512Z",
+  "updatedAt": "2026-09-11T04:31:02.004Z"
+}

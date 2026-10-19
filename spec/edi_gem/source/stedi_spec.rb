@@ -133,8 +133,8 @@ RSpec.describe EdiGem::Source::Stedi do
   end
 
   describe "#capabilities" do
-    it "supports eligibility and discovery, not batch yet" do
-      expect(stedi.capabilities).to eq(eligibility: true, discovery: true, batch: false)
+    it "supports every feature in the contract" do
+      expect(stedi.capabilities).to eq(eligibility: true, discovery: true, batch: true)
     end
   end
 end

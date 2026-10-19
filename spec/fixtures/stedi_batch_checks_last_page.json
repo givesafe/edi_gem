@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "state": "VALIDATION_FAILED",
+      "additionalInfo": {
+        "eligibility": {
+          "submitterTransactionIdentifier": "member-7159",
+          "eligibilityCheckResult": "FAILED",
+          "payerId": "11111"
+        }
+      }
+    }
+  ]
+}

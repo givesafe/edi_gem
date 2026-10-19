@@ -1,0 +1,11 @@
+{
+  "id": "01JB7Q2F3K8N4X5Y6Z7A8B9C0E",
+  "status": "VALIDATION_FAILED",
+  "totalCount": 4,
+  "validatedCount": 0,
+  "validationFailedCount": 4,
+  "successCount": 0,
+  "errorCount": 0,
+  "inProgressCount": 0,
+  "maxRetryHours": 8
+}

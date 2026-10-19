@@ -48,7 +48,33 @@ module EdiGem
       end
 
       def capabilities
-        { eligibility: true, discovery: true, batch: false }
+        { eligibility: true, discovery: true, batch: true }
+      end
+
+      # Up to 10,000 checks in one request, answered with a batch id. The price per check is the
+      # same as a real-time check.
+      #
+      # `max_retry_hours` is how long Stedi keeps retrying a payer that does not respond (8 by
+      # default, up to 24); a batch is not finished until that window closes.
+      def submit_batch(inquiries, name: nil, idempotency_key: nil, max_retry_hours: nil)
+        items = Batch.keyed(inquiries).map { |id, inquiry| batch_item(id, inquiry) }
+        body = { items: items, name: name, maxRetryHours: max_retry_hours }.compact
+        exchange = post(:batch_eligibility, body, key: idempotency_key)
+        Batch::Submission.from(parse(exchange), count: items.length, exchange: exchange)
+      end
+
+      def batch_status(batch_id)
+        exchange = get(:batch_status, "#{@policy.path_for(:batch_status)}/#{batch_id}")
+        Batch::Status.from(parse(exchange), exchange: exchange)
+      end
+
+      # Every check in the batch, in whatever state each is in, including checks that failed
+      # validation. A nil `next_page_token` is the only sign the listing is complete.
+      def batch_checks(batch_id, page_token: nil, page_size: nil)
+        query = { pageToken: page_token, pageSize: page_size }.compact
+        path = "#{@policy.path_for(:batch_checks)}/#{batch_id}/items"
+        exchange = get(:batch_checks, query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}")
+        Batch::Checks.from(parse(exchange), exchange: exchange)
       end
 
       # `archive:` is nil, or what to file the raw bodies under: `{ name: "stem" }` plus a value
@@ -98,6 +124,11 @@ module EdiGem
 
       def request(inquiry, payer_code: nil)
         Request.new(inquiry, payer_code: payer_code, credential: @credential)
+      end
+
+      def batch_item(identifier, inquiry)
+        ensure_searchable(inquiry)
+        request(inquiry, payer_code: payer_code_for(inquiry)).batch_item(identifier)
       end
 
       def parse(exchange)

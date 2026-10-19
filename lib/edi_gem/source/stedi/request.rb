@@ -25,6 +25,11 @@ module EdiGem
             encounter: encounter }.merge(credentials)
         end
 
+        # One batch item: the eligibility body plus the identifier its answer comes back under.
+        def batch_item(identifier)
+          eligibility.merge(submitterTransactionIdentifier: identifier.to_s)
+        end
+
         # A discovery must carry a service date range; Inquiry::Discovery requires as_of.
         def discovery
           on = @inquiry.service_date
