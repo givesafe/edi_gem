@@ -65,6 +65,11 @@ module EdiGem
 
     def base_url = @attrs["base_url"]
 
+    # This policy with an endpoint assigned at enrolment, which sources.yml cannot carry.
+    def at(base_url)
+      base_url.nil? ? self : self.class.new(@name, @attrs.merge("base_url" => base_url))
+    end
+
     def path_for(key) = @attrs.dig("operations", key.to_s, "path")
 
     def operations = (@attrs["operations"] || {}).keys.map(&:to_sym)
