@@ -1,0 +1,18 @@
+defaults:
+  timeout: 30
+  retry:
+    attempts: 3
+    retry_on: [timeout, rate_limited]
+  throttle:
+    per_second: 5
+  errors:
+    status:
+      "429": rate_limited
+      "403": not_authorized
+sources:
+  partial:
+    throttle:
+      per_second: 2
+    errors:
+      status:
+        "403": malformed_request

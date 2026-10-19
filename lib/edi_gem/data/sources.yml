@@ -1,0 +1,110 @@
+# Per-source transport policy: timeouts, retries, throttling, and which vendor failures map to
+# which EdiGem::Fault kind.
+#
+# `defaults` applies to every source. A source declares only where it differs; sections are
+# merged one level deep.
+
+defaults:
+  timeout: 30
+
+  retry:
+    # Safe because an eligibility inquiry is a read.
+    attempts: 3          # total tries
+    backoff: 0.5         # seconds before the first retry
+    multiplier: 2
+    max_delay: 20
+    jitter: 0.25         # +/- this fraction
+    # `retry_on`, not `on`: YAML 1.1 reads a bare `on` key as true.
+    retry_on:
+      - timeout
+      - unreachable
+      - rate_limited
+      - vendor_unavailable
+      - payer_unavailable
+      - already_in_flight
+
+  throttle:
+    per_second: 5
+    burst: 10
+
+  errors:
+    # A vendor's Retry-After wins over the backoff.
+    retry_after_header: Retry-After
+
+    status:
+      "400": malformed_request
+      "401": not_authorized
+      "403": not_authorized
+      "404": malformed_request
+      "408": timeout
+      "422": malformed_request
+      "429": rate_limited
+      "4xx": malformed_request
+      "5xx": vendor_unavailable
+
+    exceptions:
+      Net::OpenTimeout: timeout
+      Net::ReadTimeout: timeout
+      Net::WriteTimeout: timeout
+      Timeout::Error: timeout
+      SocketError: unreachable
+      Errno::ECONNREFUSED: unreachable
+      Errno::ECONNRESET: unreachable
+      Errno::EHOSTUNREACH: unreachable
+      Errno::ENETUNREACH: unreachable
+      Errno::EPIPE: unreachable
+      OpenSSL::SSL::SSLError: unreachable
+      IOError: unreachable
+
+sources:
+  stedi:
+    base_url: https://healthcare.us.stedi.com
+    # Stedi's limits are per endpoint, so timeouts and throttles are set per operation.
+    operations:
+      eligibility:
+        path: /2024-04-01/change/medicalnetwork/eligibility/v3
+      discovery:
+        path: /2024-04-01/insurance-discovery/check/v1
+        timeout: 130
+        throttle:
+          per_second: 1
+          burst: 2
+      payer_search:
+        path: /2024-04-01/payers/search
+
+      # The batch endpoints are on a different host from the real-time ones.
+      batch_eligibility:
+        base_url: https://manager.us.stedi.com
+        path: /2024-04-01/eligibility-manager/batch-eligibility
+        timeout: 120
+        throttle:
+          per_second: 1
+          burst: 2
+      batch_status:
+        base_url: https://manager.us.stedi.com
+        path: /2024-04-01/eligibility-manager/batch
+      batch_checks:
+        base_url: https://manager.us.stedi.com
+        path: /2024-04-01/eligibility-manager/batch
+        timeout: 120
+    throttle:
+      per_second: 10
+    errors:
+      status:
+        # Answered when a request with the same Idempotency-Key is still in progress.
+        "409": already_in_flight
+
+  # No base_url: the endpoint is assigned at enrolment and comes from the credential.
+  office_ally:
+    operations:
+      eligibility:
+        path: /
+    errors:
+      status:
+        "503": vendor_unavailable
+
+  # No base_url: the endpoint is not known yet and comes from the credential.
+  optum:
+    operations:
+      eligibility:
+        path: /

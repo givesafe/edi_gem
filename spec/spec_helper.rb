@@ -10,8 +10,17 @@ SimpleCov.start do
 end
 
 require "edi_gem"
+require_relative "support/canned_source"
+require_relative "support/x12_fixtures"
+require_relative "support/x12_answers"
+require_relative "support/recording_archive"
+require_relative "support/source_contract"
 
 RSpec.configure do |config|
+  config.include CannedSource
+  config.include X12Fixtures
+  config.include X12Answers
+
   # Enable flags like --only-failures and --next-failure
   config.example_status_persistence_file_path = ".rspec_status"
 

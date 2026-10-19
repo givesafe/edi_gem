@@ -1,0 +1,39 @@
+{
+  "meta": { "applicationMode": "production", "traceId": "01MOCKDISCOVERY000000000" },
+  "discoveryId": "00000000-0000-4000-8000-0000000000d1",
+  "status": "COMPLETE",
+  "coveragesFound": 1,
+  "items": [
+    {
+      "provider": { "providerName": "EXAMPLECLINIC", "npi": "1999999984", "entityType": "Non-Person Entity" },
+      "subscriber": {
+        "memberId": "MOCK00000002",
+        "firstName": "TESTFIRST",
+        "lastName": "TESTLAST",
+        "dateOfBirth": "19800101",
+        "address": {
+          "address1": "123 Example St",
+          "address2": "Apt 4",
+          "city": "Testville",
+          "state": "ZZ",
+          "postalCode": "00000"
+        },
+        "groupNumber": "GRP0002",
+        "insuredIndicator": "Y"
+      },
+      "payer": { "name": "MEDICAID FLORIDA", "payorIdentification": "77027" },
+      "planInformation": { "planNumber": "PLAN0002" },
+      "planDateInformation": { "planBegin": "20250101", "eligibilityBegin": "20250101" },
+      "benefitsInformation": [
+        {
+          "code": "1",
+          "name": "Active Coverage",
+          "serviceTypeCodes": ["30"],
+          "insuranceType": "MC"
+        }
+      ],
+      "confidence": { "level": "HIGH", "reason": "Name, date of birth and state matched" }
+    }
+  ],
+  "errors": []
+}

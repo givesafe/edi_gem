@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "senderId": "STEDI",
+    "submitterId": "000000000",
+    "applicationMode": "test",
+    "traceId": "01MOCKPAYERDOWN0000000000"
+  },
+  "controlNumber": "000000002",
+  "tradingPartnerServiceId": "77027",
+  "payer": {
+    "entityIdentifier": "Payer",
+    "name": "MEDICAID FLORIDA",
+    "payorIdentification": "77027",
+    "aaaErrors": [
+      {
+        "field": "AAA",
+        "code": "42",
+        "description": "Unable to Respond at Current Time",
+        "followupAction": "Resubmission Not Allowed",
+        "location": "Loop 2100A",
+        "possibleResolutions": "The payer is experiencing downtime. Retry after a brief delay."
+      }
+    ]
+  },
+  "errors": [
+    {
+      "field": "AAA",
+      "code": "42",
+      "description": "Unable to Respond at Current Time",
+      "followupAction": "Resubmission Not Allowed",
+      "location": "Loop 2100A",
+      "possibleResolutions": "The payer is experiencing downtime. Retry after a brief delay."
+    }
+  ]
+}
