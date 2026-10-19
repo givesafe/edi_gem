@@ -1,0 +1,39 @@
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: enable
+  SuggestExtensions: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+# Keyword arguments cannot be passed in the wrong order, so they are not counted.
+Metrics/ParameterLists:
+  CountKeywordArgs: false
+
+# X12 transaction sets are named by number: `x12_271` is a name, not a counter suffix.
+Naming/VariableNumber:
+  AllowedPatterns:
+    - '_2\d\d\z'
+    - '\Ax12_'
+
+# Spec files and the declarative schemas are long blocks by nature.
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*_spec.rb"
+    - "spec/support/source_contract.rb"
+    - "lib/edi_gem/schemas.rb"
+
+# Response#derive_state has one branch for each of the seven states.
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - "lib/edi_gem/response.rb"
+Metrics/PerceivedComplexity:
+  Exclude:
+    - "lib/edi_gem/response.rb"
+
+# `error` rather than `e`, which reek would flag.
+Naming/RescuedExceptionsVariableName:
+  PreferredName: error

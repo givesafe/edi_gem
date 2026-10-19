@@ -1,0 +1,50 @@
+/.bundle/
+/.yardoc
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+
+# rspec failure tracking
+.rspec_status
+.rspec-local
+/Gemfile.lock
+.env
+
+# Raw payloads. These can hold PHI and are never committed.
+/*-raw.json
+/*-refusal.json
+/*-response.json
+/raw/
+/spec/fixtures/*live*
+/spec/edi_gem/*live*_spec.rb
+
+# Local development tools. Kept on disk, never committed or packaged.
+/bin/*
+!/bin/console
+!/bin/setup
+/CHANGELOG.md
+/sig/
+/.reek.yml
+/lib/edi_gem/deidentify.rb
+/lib/edi_gem/deidentify/
+/spec/edi_gem/deidentify_spec.rb
+/lib/edi_gem/batch/realtime_loop.rb
+/spec/edi_gem/batch/realtime_loop_spec.rb
+/spec/support/scripted_source.rb
+
+# Payer directory, kept locally only.
+/lib/edi_gem/directory.rb
+/lib/edi_gem/directory/
+/lib/edi_gem/registry/
+/lib/edi_gem/payer.rb
+/lib/edi_gem/source_code.rb
+/lib/edi_gem/data/payers.yml
+/lib/edi_gem/data/payers_curated.yml
+/spec/edi_gem/directory_spec.rb
+/spec/edi_gem/directory/
+/spec/edi_gem/registry/
+/spec/edi_gem/payer_spec.rb
+/spec/edi_gem/source_code_spec.rb
