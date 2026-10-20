@@ -11,10 +11,13 @@ module EdiGem
     STATUS_CLASS = /\A(\d)xx\z/
 
     class << self
-      def for(source, path: DATA_PATH)
-        all(path: path).fetch(source.to_sym) do
+      # `retry:` is the caller's own retry settings, merged over the source's (see #with). The
+      # policy held for the source is never changed.
+      def for(source, path: DATA_PATH, **overrides)
+        found = all(path: path).fetch(source.to_sym) do
           raise UnknownSchema, "no policy for source #{source.inspect} in #{path}"
         end
+        overrides.empty? ? found : found.with(**overrides)
       end
 
       def all(path: DATA_PATH)
@@ -68,6 +71,13 @@ module EdiGem
     # This policy with an endpoint assigned at enrolment, which sources.yml cannot carry.
     def at(base_url)
       base_url.nil? ? self : self.class.new(@name, @attrs.merge("base_url" => base_url))
+    end
+
+    # This policy with the caller's settings over its own, key by key: `retry: { attempts: 5 }`
+    # keeps the source's backoff. Takes the keys of the `retry` block in sources.yml, and
+    # nothing else.
+    def with(**overrides)
+      self.class.new(@name, self.class.merge(@attrs, Override.sections(overrides)))
     end
 
     def path_for(key) = @attrs.dig("operations", key.to_s, "path")

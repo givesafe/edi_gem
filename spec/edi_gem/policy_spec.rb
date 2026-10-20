@@ -146,6 +146,71 @@ RSpec.describe EdiGem::Policy do
     end
   end
 
+  describe ".for with retry:" do
+    subject(:ours) { described_class.for(:stedi, retry: { attempts: 5, backoff: 2 }) }
+
+    it "takes the caller's attempts" do
+      expect(ours.attempts).to eq(5)
+    end
+
+    it "takes the caller's backoff" do
+      expect(ours.delay_before(2, random: Struct.new(:rand).new(0.5))).to eq(2)
+    end
+
+    it "keeps the source's other retry settings" do
+      expect(ours.retry?(:rate_limited)).to be(true)
+    end
+
+    it "keeps the rest of the source's policy" do
+      expect(ours.path_for(:eligibility)).to eq(described_class.for(:stedi).path_for(:eligibility))
+    end
+
+    it "reaches the policy of each operation" do
+      expect(ours.for_operation(:discovery).attempts).to eq(5)
+    end
+
+    it "accepts string keys, as the YAML file spells them" do
+      expect(described_class.for(:stedi, retry: { "attempts" => 2 }).attempts).to eq(2)
+    end
+
+    it "leaves the policy held for the source as it was" do
+      ours
+
+      expect(described_class.for(:stedi).attempts).to eq(3)
+    end
+
+    it "is the held policy itself when nothing is overridden" do
+      expect(described_class.for(:stedi)).to be(described_class.for(:stedi))
+    end
+
+    it "refuses a retry setting it does not have, so a typo is not ignored" do
+      expect { described_class.for(:stedi, retry: { attempt: 5 }) }
+        .to raise_error(ArgumentError, /unknown retry settings attempt/)
+    end
+
+    it "refuses to override anything but retry" do
+      expect { described_class.for(:stedi, timeout: 5) }
+        .to raise_error(ArgumentError, /cannot override timeout; only retry:/)
+    end
+
+    it "still raises for a source with no policy" do
+      expect { described_class.for(:availity, retry: { attempts: 1 }) }
+        .to raise_error(EdiGem::UnknownSchema, /availity/)
+    end
+  end
+
+  describe "#with" do
+    it "answers a policy that behaves as this one when given nothing" do
+      held = described_class.for(:stedi)
+
+      expect(held.with.attempts).to eq(held.attempts)
+    end
+
+    it "overrides retry settings on a policy a caller already holds" do
+      expect(described_class.for(:stedi).with(retry: { attempts: 4 }).attempts).to eq(4)
+    end
+  end
+
   describe ".reload" do
     it "reads sources.yml again rather than answering from the class-level cache" do
       described_class.for(:stedi)
