@@ -25,7 +25,6 @@
 /bin/*
 !/bin/console
 !/bin/setup
-/CHANGELOG.md
 /sig/
 /.reek.yml
 /lib/edi_gem/deidentify.rb
