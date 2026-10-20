@@ -64,9 +64,12 @@ module EdiGem
     class Checks
       attr_reader :items, :next_page_token, :exchange
 
-      def self.from(body, exchange: nil)
-        new(items: Array(body["items"]).map { |item| Check.new(item) },
-            next_page_token: body["nextPageToken"], exchange: exchange)
+      # `stored` is what the archive kept for each item, in the items' order, or nil.
+      def self.from(body, exchange: nil, stored: nil)
+        items = Array(body["items"]).each_with_index.map do |item, index|
+          Check.new(item, stored: stored&.at(index))
+        end
+        new(items: items, next_page_token: body["nextPageToken"], exchange: exchange)
       end
 
       def initialize(items:, next_page_token: nil, exchange: nil)
@@ -87,9 +90,17 @@ module EdiGem
       ACTIVE = "ACTIVE"
       DONE = %w[COMPLETED COMPLETED_WITH_ERRORS VALIDATION_FAILED].freeze
 
-      def initialize(attributes)
+      # Where the archive filed this item's raw answer (an Archive::Stored), when the page was
+      # read with `archive:`; nil otherwise.
+      attr_reader :stored
+
+      def initialize(attributes, stored: nil)
         @attributes = attributes || {}
+        @stored = stored
       end
+
+      # The item as the vendor sent it, parsed. Holds PHI.
+      def raw = @attributes
 
       def state = @attributes["state"]
 

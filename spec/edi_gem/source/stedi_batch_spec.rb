@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+
 # Stedi's batch endpoints, end to end against canned responses written from its API reference.
 RSpec.describe "batching through Stedi" do
   let(:provider) { EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic") }
@@ -238,6 +240,138 @@ RSpec.describe "batching through Stedi" do
 
     it "asks the manager host rather than the real-time one" do
       expect(page.exchange.url).to start_with("https://manager.us.stedi.com/")
+    end
+
+    # The raw item is how a caller reads a field the gem does not model.
+    it "hands back each item as the vendor sent it" do
+      expect(page.items.first.raw.dig("additionalInfo", "eligibility", "payerId")).to eq("11111")
+    end
+
+    it "has filed nothing, and says so, when it was not asked to" do
+      expect(page.items.map(&:stored)).to all(be_nil)
+    end
+  end
+
+  describe "#batch_checks with archive:" do
+    let(:archive) { RecordingArchive.new }
+    let(:batch_id) { "01JB7Q2F3K8N4X5Y6Z7A8B9C0D" }
+
+    def read_page(fixture = "stedi_batch_checks_page_one", **filing)
+      source, transport = stedi_answering(canned(fixture), archive: archive)
+      [source.batch_checks(batch_id, archive: { name: "batch-42" }.merge(filing)), transport]
+    end
+
+    it "files each item on its own, under the identifier we sent with it" do
+      read_page
+
+      expect(archive.kept.map(&:name))
+        .to eq(%w[batch-42_member-7087 batch-42_member-7091 batch-42_member-7154])
+    end
+
+    it "files them as this vendor's batch checks" do
+      read_page
+
+      expect(archive.kept.map { |kept| [kept.clearinghouse, kept.feature] }.uniq)
+        .to eq([%i[stedi batch_check]])
+    end
+
+    it "files the item's own answer, not the whole page" do
+      page, = read_page
+      body = JSON.parse(archive.kept.first.exchange.response_body)
+
+      expect(body).to eq(page.items.first.raw)
+    end
+
+    it "files no request, because an item has none" do
+      read_page
+
+      expect(archive.kept.map { |kept| kept.exchange.request_body }).to all(be_nil)
+    end
+
+    it "dates each object from the call that read the page" do
+      page, = read_page
+
+      expect(archive.kept.map { |kept| kept.exchange.started_at }.uniq)
+        .to eq([page.exchange.started_at])
+    end
+
+    it "puts where each item went on that item, in the order they came" do
+      page, = read_page
+
+      expect(page.items.map { |check| check.stored.response_uri }).to eq(
+        %w[member-7087 member-7091 member-7154].map do |id|
+          "s3://warehouse/batch_check/response/batch-42_#{id}.json"
+        end
+      )
+    end
+
+    it "passes on whatever else the caller wants the template to key a folder on" do
+      read_page(run_id: 7)
+
+      expect(archive.kept.map(&:supplied).uniq).to eq([{ run_id: 7 }])
+    end
+
+    it "files one object for each item, however many the page holds" do
+      page, = read_page("stedi_batch_checks_last_page")
+
+      expect(archive.kept.size).to eq(page.items.size)
+    end
+
+    it "refuses before asking when there is nowhere to file", :aggregate_failures do
+      source, transport = stedi_answering(canned("stedi_batch_checks_page_one"))
+
+      expect { source.batch_checks(batch_id, archive: { name: "batch-42" }) }
+        .to raise_error(EdiGem::ArchiveNotConfigured)
+      expect(transport.paths).to be_empty
+    end
+
+    it "refuses before asking when it was given no name to file under", :aggregate_failures do
+      source, transport = stedi_answering(canned("stedi_batch_checks_page_one"), archive: archive)
+
+      expect { source.batch_checks(batch_id, archive: { name: "" }) }
+        .to raise_error(ArgumentError, /name/)
+      expect(transport.paths).to be_empty
+    end
+
+    it "actually writes one object per item through a real archive" do
+      Dir.mktmpdir("edi-archive") do |root|
+        local = EdiGem::Archive::Local.new(template: "#{root}/$FEATURE/$DIRECTION")
+        source, = stedi_answering(canned("stedi_batch_checks_page_one"), archive: local)
+        page = source.batch_checks(batch_id, archive: { name: "batch-42" })
+        written = File.read(page.items.last.stored.response_uri.delete_prefix("file://"))
+
+        expect(JSON.parse(written)).to eq(page.items.last.raw)
+      end
+    end
+
+    context "when an item cannot be filed" do
+      def item(identifier)
+        eligibility = { "submitterTransactionIdentifier" => identifier }.compact
+        { "state" => "COMPLETED", "additionalInfo" => { "eligibility" => eligibility } }
+      end
+
+      # A good item first, so a page filed one at a time would leave it behind.
+      def page_with(identifier)
+        answering(JSON.generate(items: [item("member-7087"), item(identifier)]))
+      end
+
+      it "raises for a name the archive cannot write, and files none of the page" do
+        source, = stedi_answering(page_with("member-7091"), archive: archive)
+
+        expect { source.batch_checks(batch_id, archive: { name: "not a file name" }) }
+          .to raise_error(ArgumentError, /cannot be filed/)
+        expect(archive.kept).to be_empty
+      end
+
+      [nil, "", "has a space", "../escape"].each do |identifier|
+        it "raises for the identifier #{identifier.inspect}, and files none of the page" do
+          source, = stedi_answering(page_with(identifier), archive: archive)
+
+          expect { source.batch_checks(batch_id, archive: { name: "batch-42" }) }
+            .to raise_error(ArgumentError, /cannot be filed under that name and its identifier/)
+          expect(archive.kept).to be_empty
+        end
+      end
     end
   end
 end

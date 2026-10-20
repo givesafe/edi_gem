@@ -29,7 +29,7 @@ RSpec.shared_examples "a source" do
   it "takes the contract's keywords on every feature method" do
     expected = { eligibility: %i[idempotency_key archive], discovery: %i[idempotency_key archive],
                  resolve: %i[archive], submit_batch: %i[name idempotency_key],
-                 batch_checks: %i[page_token page_size] }
+                 batch_checks: %i[page_token page_size archive] }
     expected.each do |name, keys|
       taken = source.method(name).parameters.filter_map { |kind, key| key if kind == :key }
       expect(taken).to include(*keys), "#{name} takes #{taken.inspect}"

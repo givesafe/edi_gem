@@ -43,7 +43,36 @@ module EdiGem
                        stored: (kept(exchange, feature, archive) if archive))
         end
 
+        # Files each item of a batch page as its own object, named `<name>_<identifier>`, and
+        # returns what the archive kept for each, in the items' order (nil when not asked to).
+        # Every name is checked before the first write, so a page is filed whole or not at all.
+        def keep_items(exchange, body, feature:, archive:)
+          return unless archive
+
+          items = Array(body["items"])
+          names = items.map { |item| item_name(archive[:name], item) }
+          items.zip(names).map do |item, name|
+            kept(item_exchange(exchange, item), feature, archive.merge(name: name))
+          end
+        end
+
         private
+
+        # Neither the stem nor the identifier is named in the error: both are identifiers.
+        def item_name(stem, item)
+          identifier = Batch::Check.new(item).identifier
+          name = "#{stem}_#{identifier}"
+          return name unless identifier.to_s.empty? || !name.match?(Archive::SAFE_NAME)
+
+          raise ArgumentError, "a batch item cannot be filed under that name and its identifier"
+        end
+
+        # One item of a page, as the exchange the archive files: the page's call, with the item
+        # (as parsed, then written again) for a body.
+        def item_exchange(page, item)
+          Exchange.new(method: page.method, url: page.url, status: page.status,
+                       response_body: JSON.generate(item), started_at: page.started_at)
+        end
 
         def kept(exchange, feature, filing)
           @archive.keep(exchange, clearinghouse: @clearinghouse, feature: feature,

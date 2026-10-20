@@ -76,7 +76,8 @@ module EdiGem
       end
 
       # One Batch::Checks page. Pass the previous page's `next_page_token` to read the next.
-      def batch_checks(_batch_id, page_token: nil, page_size: nil)
+      # `archive:` files each check's raw answer, as for the other features.
+      def batch_checks(_batch_id, page_token: nil, page_size: nil, archive: nil)
         unsupported(:batch)
       end
       # rubocop:enable Lint/UnusedMethodArgument

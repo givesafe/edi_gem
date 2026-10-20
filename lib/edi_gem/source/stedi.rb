@@ -70,11 +70,18 @@ module EdiGem
 
       # Every check in the batch, in whatever state each is in, including checks that failed
       # validation. A nil `next_page_token` is the only sign the listing is complete.
-      def batch_checks(batch_id, page_token: nil, page_size: nil)
+      #
+      # `archive:` (`{ name: "stem" }`, as for a real-time check) files each item's raw answer as
+      # its own object under `<stem>_<identifier>`; the Archive::Stored comes back on the item as
+      # `check.stored`. An item with no identifier cannot be filed, and raises.
+      def batch_checks(batch_id, page_token: nil, page_size: nil, archive: nil)
+        responses.ensure_archivable(archive)
         query = { pageToken: page_token, pageSize: page_size }.compact
         path = "#{@policy.path_for(:batch_checks)}/#{batch_id}/items"
         exchange = get(:batch_checks, query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}")
-        Batch::Checks.from(parse(exchange), exchange: exchange)
+        body = parse(exchange)
+        stored = responses.keep_items(exchange, body, feature: BATCH_CHECK, archive: archive)
+        Batch::Checks.from(body, exchange: exchange, stored: stored)
       end
 
       # `archive:` is nil, or what to file the raw bodies under: `{ name: "stem" }` plus a value
