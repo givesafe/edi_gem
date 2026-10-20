@@ -29,6 +29,28 @@ gem "edi_gem", github: "givesafe/edi-gem"
 stedi = EdiGem::Source::Stedi.new(api_key: ENV.fetch("STEDI_API_KEY"))
 ```
 
+A source can also be built by name, so the clearinghouse is a value, not a class in your code:
+
+```ruby
+source = EdiGem::Source.for(:stedi, api_key: ENV.fetch("STEDI_API_KEY"))
+EdiGem::Source.names    # => [:stedi, :office_ally, :optum]
+```
+
+`config` is whatever that source's initializer takes. An unknown name raises
+`EdiGem::UnknownSource`.
+
+To change how a source retries, merge your settings over its policy instead of rebuilding it:
+
+```ruby
+policy = EdiGem::Policy.for(:stedi, retry: { attempts: 5, backoff: 1 })
+stedi = EdiGem::Source::Stedi.new(api_key: key, policy: policy)
+```
+
+Settings merge key by key, so `attempts` alone keeps the source's backoff. Only `retry:` can be
+overridden, with the keys of the `retry` block in `lib/edi_gem/data/sources.yml`
+(`attempts`, `backoff`, `multiplier`, `max_delay`, `jitter`, `retry_on`); an unknown key raises
+`ArgumentError`. An operation that sets its own `retry` in `sources.yml` keeps it.
+
 A Stedi test key reaches test mode on the same host. Optional keywords: `credential:` holds the
 per-payer secrets for one provider (`EdiGem::Credential.new(provider:, source: :stedi,
 values: { portal_password: "..." })`), and `archive:` is where raw bodies are kept.
@@ -70,7 +92,17 @@ submission = stedi.submit_batch({ "row-1" => inquiry }, name: "monthly refresh")
 stedi.batch_status(submission.id).finished?
 page = stedi.batch_checks(submission.id)
 page = stedi.batch_checks(submission.id, page_token: page.next_page_token) while page.more?
+
+# The same, filing each item's raw answer. Every item goes to its own object, named
+# "<name>_<your identifier>", and says where it went.
+page = stedi.batch_checks(submission.id, archive: { name: "batch-42" })
+page.items.first.stored.response_uri   # => "s3://bucket/edi/stedi/202610/batch_check/response/..."
+page.items.first.raw                   # the item as the vendor sent it, parsed
 ```
+
+An identifier that is not a safe file name (or is missing) raises `ArgumentError` before anything
+is written, so a page is filed whole or not at all. Reading a page again files it again, as new
+objects. `raw` and the archived bodies are PHI.
 
 Discovery benefits carry the address the payer has on record: `matched_address_line1`,
 `matched_address_line2`, `matched_city`, `matched_state` and `matched_postal_code`.
@@ -100,12 +132,12 @@ Every source subclasses `EdiGem::Source::Base`:
 - `eligibility(inquiry, idempotency_key: nil, archive: nil)`
 - `discovery(inquiry, idempotency_key: nil, archive: nil)` and `resolve(handle, archive: nil)`
 - `submit_batch(inquiries, name: nil, idempotency_key: nil, **options)`, `batch_status(batch_id)`,
-  `batch_checks(batch_id, page_token: nil, page_size: nil)`
+  `batch_checks(batch_id, page_token: nil, page_size: nil, archive: nil)`
 
 A feature a source does not support raises `EdiGem::FeatureNotSupported`. To add a
 clearinghouse, subclass `Base` (or `X12Source` for a 270/271 vendor), declare `NAME`,
 `search_options` and `capabilities`, override the features it supports, add its block to
-`lib/edi_gem/data/sources.yml`, and include `it_behaves_like "a source"` in its spec. X12 sources
+`lib/edi_gem/data/sources.yml`, add its name to `Source::CLASSES` so `Source.for` finds it, and include `it_behaves_like "a source"` in its spec. X12 sources
 also take `trace:` on `eligibility` and refuse `archive:`.
 
 ## PHI
