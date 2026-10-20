@@ -3,6 +3,23 @@
 module EdiGem
   # Somewhere an inquiry can be sent, usually a clearinghouse.
   module Source
+    # The sources a caller can ask for by name, and the class each name stands for. Resolved when
+    # asked, because the source files load after this one.
+    CLASSES = { stedi: :Stedi, office_ally: :OfficeAlly, optum: :Optum }.freeze
+
+    # A source built by name, so a caller picks the clearinghouse from data and never names a
+    # class. `config` is whatever that source's initializer takes.
+    #
+    #   EdiGem::Source.for(:stedi, api_key: key)
+    def self.for(name, **config)
+      const_get(CLASSES.fetch(name.to_s.to_sym) do
+        raise UnknownSource, "no source named #{name.inspect}; one of #{names.join(", ")}"
+      end).new(**config)
+    end
+
+    # The names Source.for accepts.
+    def self.names = CLASSES.keys
+
     # The contract every source implements, so a caller never branches on which source it holds.
     #
     # A subclass declares NAME and search_options, reports its capabilities, and overrides the

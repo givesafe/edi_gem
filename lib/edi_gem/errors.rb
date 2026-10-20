@@ -15,6 +15,9 @@ module EdiGem
   # No schema or policy is registered under that name.
   class UnknownSchema < Error; end
 
+  # No source is registered under that name. See Source.for.
+  class UnknownSource < Error; end
+
   # data/sources.yml is unreadable or declares a key twice.
   class InvalidPolicy < Error; end
 
