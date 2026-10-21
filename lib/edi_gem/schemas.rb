@@ -5,6 +5,7 @@
 EdiGem::Schema.define(:x12_271) do
   benefit "2110C/EB" do
     field :status, from: "EB01", codec: :eb01_status
+    field :status_code, from: "EB01", codec: :eb01_status_code
     field :benefit_type, from: "EB01", codec: :eb01_benefit
     field :service_types, from: "EB03", codec: :codes
     field :insurance_type, from: "EB04"
@@ -54,6 +55,7 @@ end
 EdiGem::Schema.define(:stedi) do
   benefit "benefitsInformation[]" do
     field :status, from: "code", codec: :eb01_status
+    field :status_code, from: "code", codec: :eb01_status_code
     field :benefit_type, from: "code", codec: :eb01_benefit
     field :service_types, from: "serviceTypeCodes", codec: :codes
     field :plan_name, from: "planCoverage"
@@ -61,6 +63,9 @@ EdiGem::Schema.define(:stedi) do
     field :in_network, from: "inPlanNetworkIndicatorCode", codec: :yes_no
     field :primary_payer_code, from: "benefitsRelatedEntities", codec: :primary_payer_code
     field :primary_payer_name, from: "benefitsRelatedEntities", codec: :primary_payer_name
+    # The line's own dates, which win over the plan's for that line.
+    field :line_begins_on, from: "benefitsDateInformation", codec: :span_begin
+    field :line_ends_on, from: "benefitsDateInformation", codec: :span_end
   end
 
   benefit "planInformation" do
@@ -82,8 +87,8 @@ EdiGem::Schema.define(:stedi) do
     field :payer_code, from: "payorIdentification"
   end
 
-  # Several date keys can appear and the earliest end governs, so `ends_on` is a starting point;
-  # the rest are readable through Benefit#[]. `plan` (one date or a range) is the fallback when
+  # Several date keys can appear and the earliest end governs: `coverage_ends_on` is that end,
+  # and the rest are readable through Benefit#[]. `plan` (one date or a range) is the fallback when
   # the payer sends no begin or end of its own.
   benefit "planDateInformation" do
     field :begins_on, from: "eligibilityBegin"
@@ -96,6 +101,7 @@ EdiGem::Schema.define(:stedi) do
     field :eligibility_ends_on, from: "eligibilityEnd"
     field :policy_effective_on, from: "policyEffective"
     field :policy_expires_on, from: "policyExpiration"
+    field :coverage_ends_on, from: "", codec: :span_end
   end
 
   rejection "payer.aaaErrors[]", level: :payer do
@@ -168,6 +174,7 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :ends_on, from: "planDateInformation.plan", codec: :rd8_end
     field :plan_begins_on, from: "planDateInformation.plan", codec: :rd8_start
     field :plan_ends_on, from: "planDateInformation.plan", codec: :rd8_end
+    field :coverage_ends_on, from: "planDateInformation", codec: :span_end
     field :confidence, from: "confidence.level"
     field :confidence_reason, from: "confidence.reason"
     %w[subscriber dependent].reverse_each do |person|
@@ -185,12 +192,16 @@ EdiGem::Schema.define(:stedi_discovery) do
   # A separate block, because a field is addressed relative to its own record.
   benefit "items[].benefitsInformation[]" do
     field :status, from: "code", codec: :eb01_status
+    field :status_code, from: "code", codec: :eb01_status_code
     field :benefit_type, from: "code", codec: :eb01_benefit
     field :service_types, from: "serviceTypeCodes", codec: :codes
     field :plan_name, from: "name"
     field :insurance_type, from: "insuranceType"
     field :primary_payer_code, from: "benefitsRelatedEntities", codec: :primary_payer_code
     field :primary_payer_name, from: "benefitsRelatedEntities", codec: :primary_payer_name
+    # The line's own dates, which win over the plan's for that line.
+    field :line_begins_on, from: "benefitsDateInformation", codec: :span_begin
+    field :line_ends_on, from: "benefitsDateInformation", codec: :span_end
   end
 
   # Stedi's discovery answer has only the flat list. Its `location` ("Loop 2100C") names the lane,

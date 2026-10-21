@@ -74,6 +74,11 @@ module EdiGem
       @benefits.select(&:active?)
     end
 
+    # Whether the plan covers the person on this day (Coverage's two-part test).
+    def coverage_on(date)
+      Coverage.on(@benefits, date)
+    end
+
     private
 
     # An empty answer with a handle is pending unless the source said it is settled; only a

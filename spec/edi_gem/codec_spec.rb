@@ -97,4 +97,30 @@ RSpec.describe EdiGem::Codec do
       expect { described_class.decode(:nonsense, "1") }.to raise_error(ArgumentError, /nonsense/)
     end
   end
+  describe "date spans" do
+    it "reads the earliest end a date-information object sends" do
+      dates = { "plan" => "20260101-20261231", "eligibilityEnd" => "20260930", "policyExpiration" => "20261130" }
+
+      expect(described_class.decode(:span_end, dates)).to eq("20260930")
+    end
+
+    it "does not read policyEffective as an end" do
+      expect(described_class.decode(:span_end, { "policyEffective" => "20260101" })).to be_nil
+    end
+
+    it "reads the benefit's own begin over the member's and the plan's" do
+      dates = { "benefitBegin" => "20260701", "eligibilityBegin" => "20260201", "plan" => "20260101-20261231" }
+
+      expect(described_class.decode(:span_begin, dates)).to eq("20260701")
+    end
+
+    it "reads nothing from a value that is not a date-information object" do
+      expect([described_class.decode(:span_begin, "20260101"),
+              described_class.decode(:span_end, nil)]).to eq([nil, nil])
+    end
+
+    it "keeps the status code itself, and only for a status" do
+      expect(%w[5 7 B].map { |code| described_class.decode(:eb01_status_code, code) }).to eq(["5", "7", nil])
+    end
+  end
 end

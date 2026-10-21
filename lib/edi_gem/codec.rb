@@ -28,6 +28,10 @@ module EdiGem
     # Two codecs over one element. A code neither table names is kept as-is on the benefit side.
     EB01_STATUS = ->(value) { ELIGIBILITY_STATUS[value.to_s] }
 
+    # The status code itself, kept because 5, 7 and 8 say more than active or inactive: the payer
+    # is investigating, or updating its records.
+    EB01_STATUS_CODE = ->(value) { value.to_s if ELIGIBILITY_STATUS.key?(value.to_s) }
+
     EB01_BENEFIT = lambda do |value|
       return nil if value.nil? || ELIGIBILITY_STATUS.key?(value.to_s)
 
@@ -82,6 +86,29 @@ module EdiGem
 
     RD8_END = ->(value) { value.to_s[RD8, :end] }
 
+    # A date-information object (Stedi's planDateInformation, benefitsDateInformation) read as one
+    # span. Its own begin wins, the benefit's over the member's over the plan's; a period key's
+    # start is the fallback. Its end is the earliest end it sends, since coverage stops at the
+    # first. Stedi's list of ends also names policyEffective, which is a start; it is not read.
+    SPAN_BEGINS = %w[benefitBegin eligibilityBegin planBegin].freeze
+    SPAN_ENDS = %w[benefitEnd eligibilityEnd planEnd policyExpiration].freeze
+    SPAN_PERIODS = %w[benefit eligibility plan].freeze
+    DAY = /\A\d{8}\z/
+
+    SPAN_BEGIN = lambda do |dates|
+      return nil unless dates.is_a?(Hash)
+
+      (dates.values_at(*SPAN_BEGINS) + dates.values_at(*SPAN_PERIODS).map(&RD8_START))
+        .find { |day| day.to_s.match?(DAY) }
+    end
+
+    SPAN_END = lambda do |dates|
+      return nil unless dates.is_a?(Hash)
+
+      (dates.values_at(*SPAN_ENDS) + dates.values_at(*SPAN_PERIODS).map(&RD8_END))
+        .select { |day| day.to_s.match?(DAY) }.min
+    end
+
     # The payer a benefit line names as primary (2120C, `benefitsRelatedEntities`), which need not
     # be the payer that answered. Only a PI qualifier makes the value a payer code.
     PRIMARY_PAYER = "Primary Payer"
@@ -100,8 +127,9 @@ module EdiGem
 
     PRIMARY_PAYER_NAME = ->(entities) { PRIMARY_PAYER_OF.call(entities)&.fetch("entityName", nil) }
 
-    REGISTRY = { eb01_status: EB01_STATUS, eb01_benefit: EB01_BENEFIT, aaa03: REJECT_REASON,
-                 yes_no: YES_NO, codes: CODES, rd8_start: RD8_START, rd8_end: RD8_END,
+    REGISTRY = { eb01_status: EB01_STATUS, eb01_status_code: EB01_STATUS_CODE, eb01_benefit: EB01_BENEFIT,
+                 aaa03: REJECT_REASON, yes_no: YES_NO, codes: CODES, rd8_start: RD8_START, rd8_end: RD8_END,
+                 span_begin: SPAN_BEGIN, span_end: SPAN_END,
                  primary_payer_code: PRIMARY_PAYER_CODE, primary_payer_name: PRIMARY_PAYER_NAME }.freeze
 
     # A codec is a lookup table, or a rule when the mapping is not one value to one value.
