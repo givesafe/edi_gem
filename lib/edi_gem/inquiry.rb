@@ -38,15 +38,18 @@ module EdiGem
     # `payer_code` is the target clearinghouse's code for the payer; codes differ between
     # clearinghouses, so the caller passes the one for the source it is calling. `payer_name` is
     # optional and written only where a source's request carries it (NM1*PR in a 270).
-    # `required_credentials` lists the Credential keys the payer requires through that source.
+    # `required_credentials` lists Credential keys the payer requires through that source, beyond
+    # those the source already knows it needs. `credential` holds this payer's secrets for this
+    # inquiry, and is used in place of the source's own: each payer issues its own.
     class Eligibility < Base
-      attr_reader :payer_code, :payer_name, :required_credentials
+      attr_reader :payer_code, :payer_name, :required_credentials, :credential
 
-      def initialize(payer_code:, payer_name: nil, required_credentials: [], **base)
+      def initialize(payer_code:, payer_name: nil, required_credentials: [], credential: nil, **base)
         super(**base)
         @payer_code = payer_code
         @payer_name = payer_name
         @required_credentials = required_credentials.map(&:to_sym)
+        @credential = credential
       end
     end
 

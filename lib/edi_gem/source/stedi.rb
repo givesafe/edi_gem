@@ -130,7 +130,7 @@ module EdiGem
       end
 
       def request(inquiry, payer_code: nil)
-        Request.new(inquiry, payer_code: payer_code, credential: @credential)
+        Request.new(inquiry, payer_code: payer_code, credential: @credential, policy: @policy)
       end
 
       def batch_item(identifier, inquiry)

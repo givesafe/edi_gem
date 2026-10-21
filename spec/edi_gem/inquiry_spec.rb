@@ -41,6 +41,18 @@ RSpec.describe EdiGem::Inquiry::Eligibility do
     expect(needing.required_credentials).to eq([:portal_password])
   end
 
+  it "carries no credential unless given one" do
+    expect(inquiry.credential).to be_nil
+  end
+
+  it "carries the credential it was given" do
+    credential = EdiGem::Credential.new(provider: provider, source: :stedi, values: { portal_password: "0000" })
+    held = described_class.new(payer_code: "12345", credential: credential, subscriber: subscriber,
+                               provider: provider)
+
+    expect(held.credential).to be(credential)
+  end
+
   it "refuses to be built without a payer code" do
     expect { described_class.new(subscriber: subscriber, provider: provider) }
       .to raise_error(ArgumentError, /payer_code/)

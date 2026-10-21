@@ -42,6 +42,13 @@ module EdiGem
         { eligibility: false, discovery: false, batch: false }
       end
 
+      # The Credential keys a payer needs through this source before it will answer, by the
+      # source's payer code, as data/sources.yml declares them. Empty when the payer needs nothing
+      # beyond the source's own key.
+      def required_credentials(payer_code)
+        @policy&.credentials_for(payer_code) || []
+      end
+
       def supports?(feature)
         capabilities.fetch(feature.to_sym) do
           raise ArgumentError, "unknown feature #{feature.inspect}; one of #{FEATURES.join(", ")}"

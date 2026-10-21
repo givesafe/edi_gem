@@ -20,6 +20,10 @@ RSpec.describe EdiGem::Source::Base do
     expect(port.capabilities).to eq(eligibility: false, discovery: false, batch: false)
   end
 
+  it "requires no payer credential" do
+    expect(port.required_credentials("12345")).to eq([])
+  end
+
   it "supports nothing" do
     expect(described_class::FEATURES.map { |feature| port.supports?(feature) }).to all(be(false))
   end

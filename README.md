@@ -78,8 +78,11 @@ response = stedi.eligibility(inquiry, archive: { name: "check-42" })
 response.state            # => :complete
 response.active_benefits  # => [#<EdiGem::Benefit ...>]
 
-# A payer that needs a credential through this source:
-EdiGem::Inquiry::Eligibility.new(payer_code: "12345", required_credentials: [:portal_password], ...)
+# A payer that needs a credential through this source. `required_credentials` names what
+# sources.yml does not already declare; the inquiry's `credential:` is used over the source's.
+stedi.required_credentials("100065")  # => [:portal_password], Medi-Cal's PIN
+pin = EdiGem::Credential.new(provider: provider, source: :stedi, values: { portal_password: "..." })
+EdiGem::Inquiry::Eligibility.new(payer_code: "100065", credential: pin, ...)
 
 # Insurance discovery: no payer, and the date asked about is required.
 discovery = EdiGem::Inquiry::Discovery.new(subscriber: subscriber, provider: provider,

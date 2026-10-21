@@ -1,7 +1,15 @@
 ## [Unreleased]
 
-All additions; no existing call changes.
+All additions; one existing call changes: a Stedi check to a payer `sources.yml` declares as
+needing a credential (Medi-Cal, `100065`) now raises `EdiGem::CredentialMissing` before it is
+sent when no credential is given, as an inquiry's `required_credentials` already did.
 
+- `payer_credentials` in `sources.yml` names, by the source's payer code, the Credential keys a
+  payer needs. `Source::Base#required_credentials(payer_code)` and `Policy#credentials_for`
+  read it. Stedi's Medi-Cal (`100065`) needs `portal_password`, its PIN.
+- `Inquiry::Eligibility` takes `credential:`, the payer's secrets for that inquiry, used in place
+  of the source's own. Each payer issues its own, so one source can check several payers, and a
+  batch can carry a different credential on each item.
 - `EdiGem.reveal = true` makes `inspect` and `pp` print secrets and PHI in full, for hosts with
   no real member data and no production key. Off unless set to `true`.
 - Sources, `Source::Connection`, `Archive::Signature`, `Core::Request`, `Document` and its

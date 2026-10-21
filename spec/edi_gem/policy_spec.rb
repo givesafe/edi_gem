@@ -136,6 +136,16 @@ RSpec.describe EdiGem::Policy do
     end
   end
 
+  describe "#credentials_for" do
+    it "names the keys a payer needs, by the source's payer code" do
+      expect(described_class.for(:stedi).credentials_for("100065")).to eq([:portal_password])
+    end
+
+    it "is empty for a payer with no entry" do
+      expect(described_class.for(:stedi).credentials_for("12345")).to eq([])
+    end
+  end
+
   # An operation the source asks for and the policy file does not declare. It raises rather than
   # returning the vendor-wide defaults, because a policy with no `path` would build a request
   # against the base URL and post PHI at whatever answers there.

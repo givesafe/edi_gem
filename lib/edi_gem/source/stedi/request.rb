@@ -9,10 +9,12 @@ module EdiGem
         CREDENTIAL_FIELDS = { portal_password: :portalPassword,
                               portal_username: :portalUsername }.freeze
 
-        def initialize(inquiry, payer_code: nil, credential: nil)
+        # `policy` says what the payer needs through Stedi; the inquiry may name more.
+        def initialize(inquiry, policy:, payer_code: nil, credential: nil)
           @inquiry = inquiry
           @payer_code = payer_code
           @credential = credential
+          @policy = policy
         end
 
         # dateOfService is sent only when the inquiry names a date; omitting it asks about today.
@@ -40,9 +42,13 @@ module EdiGem
 
         private
 
+        def required_credentials
+          @policy.credentials_for(@payer_code) | @inquiry.required_credentials
+        end
+
         def credentials
-          (@credential || Credential.none)
-            .values_for(@inquiry.required_credentials, CREDENTIAL_FIELDS,
+          (@inquiry.credential || @credential || Credential.none)
+            .values_for(required_credentials, CREDENTIAL_FIELDS,
                         payer: @inquiry.payer_name || @payer_code)
         end
       end

@@ -83,6 +83,45 @@ RSpec.describe EdiGem::Source::Stedi do
     it "never prints the value, because a credential reaches a log the moment it is inspected" do
       expect(pin.inspect).to_not include("0000")
     end
+
+    it "sends the inquiry's own credential in place of the source's" do
+      source = described_class.new(api_key: "test_key", credential: pin)
+      own = EdiGem::Credential.new(provider: provider, source: :stedi, values: { portal_password: "1111" })
+      inquiry = eligibility_inquiry(required_credentials: [:portal_password], credential: own)
+
+      expect(source.eligibility_body(inquiry)[:portalPassword]).to eq("1111")
+    end
+  end
+
+  # Medi-Cal is declared in data/sources.yml, so the caller need not know it wants a PIN.
+  describe "a payer the source knows requires a credential" do
+    let(:medi_cal) { eligibility_inquiry(payer_code: "100065") }
+    let(:pin) do
+      EdiGem::Credential.new(provider: provider, source: :stedi, values: { portal_password: "0000" })
+    end
+
+    it "names what Medi-Cal requires" do
+      expect(stedi.required_credentials("100065")).to eq([:portal_password])
+    end
+
+    it "requires nothing of a payer it has no entry for" do
+      expect(stedi.required_credentials("12345")).to eq([])
+    end
+
+    it "refuses to build the request when the inquiry names no credential" do
+      expect { stedi.eligibility_body(medi_cal) }
+        .to raise_error(EdiGem::CredentialMissing, /100065 requires portal_password/)
+    end
+
+    it "sends the PIN the inquiry carries" do
+      inquiry = eligibility_inquiry(payer_code: "100065", credential: pin)
+
+      expect(stedi.eligibility_body(inquiry)[:portalPassword]).to eq("0000")
+    end
+
+    it "refuses a batch item short of the PIN before anything is sent" do
+      expect { stedi.submit_batch([medi_cal]) }.to raise_error(EdiGem::CredentialMissing)
+    end
   end
 
   describe "#discovery_body" do

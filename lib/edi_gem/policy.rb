@@ -100,6 +100,9 @@ module EdiGem
 
     def throttle_per_second = @attrs.dig("throttle", "per_second")
 
+    # The Credential keys a payer needs through this source, by the source's payer code.
+    def credentials_for(payer_code) = Array(@attrs.dig("payer_credentials", payer_code.to_s)).map(&:to_sym)
+
     # A source may narrow which retryable kinds it retries, never make a terminal kind retryable.
     def retry?(kind)
       return false unless Fault::KINDS.fetch(kind.to_sym, {})[:retryable]

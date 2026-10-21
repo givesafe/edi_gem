@@ -93,6 +93,12 @@ sources:
       status:
         # Answered when a request with the same Idempotency-Key is still in progress.
         "409": already_in_flight
+    # Payers that will not answer through Stedi without the provider's own secret, by Stedi's
+    # payer code, and the Credential keys each one needs. A request short of them is refused
+    # before it is sent: the payer would answer it as if the provider were not enrolled.
+    payer_credentials:
+      # Medi-Cal: the provider's PIN, sent as portalPassword.
+      "100065": [portal_password]
 
   # No base_url: the endpoint is assigned at enrolment and comes from the credential.
   office_ally:
