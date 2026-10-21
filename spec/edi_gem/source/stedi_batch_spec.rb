@@ -252,6 +252,64 @@ RSpec.describe "batching through Stedi" do
     end
   end
 
+  describe "#batch_results" do
+    let(:batch_id) { "01JB7Q2F3K8N4X5Y6Z7A8B9C0D" }
+
+    def read_results(store: nil, **options)
+      source, transport = stedi_answering(canned("stedi_batch_results_page"), archive: store)
+      [source.batch_results(batch_id, **options), transport]
+    end
+
+    it "asks the polling endpoint on the manager host, for this batch" do
+      page, = read_results
+
+      expect(page.exchange.url)
+        .to eq("https://manager.us.stedi.com/2024-04-01/eligibility-manager/polling/batch-eligibility?batchId=#{batch_id}")
+    end
+
+    it "asks for the next page with the token the last one gave, and a page size when given" do
+      _, transport = read_results(page_token: "eyJwYWdlIjoyfQ", page_size: 20)
+
+      expect(transport.paths.last).to include("pageToken=eyJwYWdlIjoyfQ").and include("pageSize=20")
+    end
+
+    it "correlates each answer back by the identifier we sent" do
+      page, = read_results
+
+      expect(page.items.map(&:identifier)).to eq(%w[member-7087 member-7091])
+    end
+
+    # The same reading as a real-time check, so the same coverage rule applies to it.
+    it "reads each item as a full answer" do
+      page, = read_results
+
+      expect(page.items.map { |item| item.response.coverage_on(Date.new(2026, 10, 21)).to_h })
+        .to eq([{ status: :active, code: "1" }, { status: :inactive, code: "7" }])
+    end
+
+    it "says there is more when the vendor sent a token" do
+      page, = read_results
+
+      expect(page).to be_more
+    end
+
+    it "prints no member details when inspected" do
+      page, = read_results
+
+      expect(page.items.first.inspect).to eq("#<EdiGem::Batch::Answer complete>")
+    end
+
+    it "files each item on its own, under the identifier we sent with it" do
+      archive = RecordingArchive.new
+      page, = read_results(store: archive, archive: { name: "batch-42" })
+
+      filed = [archive.kept.map(&:name), archive.kept.map(&:feature).uniq]
+
+      expect(filed).to eq([%w[batch-42_member-7087 batch-42_member-7091], [:batch_result]])
+      expect(page.items.map { |item| item.response.archived? }).to eq([true, true])
+    end
+  end
+
   describe "#batch_checks with archive:" do
     let(:archive) { RecordingArchive.new }
     let(:batch_id) { "01JB7Q2F3K8N4X5Y6Z7A8B9C0D" }

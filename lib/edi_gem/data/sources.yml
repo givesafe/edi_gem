@@ -87,6 +87,10 @@ sources:
         base_url: https://manager.us.stedi.com
         path: /2024-04-01/eligibility-manager/batch
         timeout: 120
+      batch_results:
+        base_url: https://manager.us.stedi.com
+        path: /2024-04-01/eligibility-manager/polling/batch-eligibility
+        timeout: 120
     throttle:
       per_second: 10
     errors:

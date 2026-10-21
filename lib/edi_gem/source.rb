@@ -90,6 +90,11 @@ module EdiGem
       def batch_checks(_batch_id, page_token: nil, page_size: nil, archive: nil)
         unsupported(:batch)
       end
+
+      # One Batch::Answers page: the full answer of each check in the batch that has finished.
+      def batch_results(_batch_id, page_token: nil, page_size: nil, archive: nil)
+        unsupported(:batch)
+      end
       # rubocop:enable Lint/UnusedMethodArgument
 
       private

@@ -63,6 +63,10 @@ RSpec.describe EdiGem::Source::Base do
       .to raise_error(EdiGem::FeatureNotSupported, /batch/)
   end
 
+  it "refuses a page of batch results" do
+    expect { port.batch_results("b1") }.to raise_error(EdiGem::FeatureNotSupported, /batch/)
+  end
+
   it "is a gem error, so a caller rescuing EdiGem::Error catches it" do
     expect(EdiGem::FeatureNotSupported.ancestors).to include(EdiGem::Error)
   end

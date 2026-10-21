@@ -12,6 +12,8 @@ module EdiGem
         # The vendor gave up on the request. Nothing in it is an answer, so it is a Fault, raised
         # after the body is filed.
         ERROR = "ERROR"
+        # Where a batch results item carries the identifier it was sent with.
+        IDENTIFIER = "submitterTransactionIdentifier"
 
         def initialize(clearinghouse:, archive: nil)
           @clearinghouse = clearinghouse
@@ -56,9 +58,21 @@ module EdiGem
           return unless archive
 
           items = Array(body["items"])
-          names = items.map { |item| item_name(archive[:name], item) }
+          names = items.map { |item| item_name(archive[:name], Batch::Check.new(item).identifier) }
           items.zip(names).map do |item, name|
             kept(item_exchange(exchange, item), feature, archive.merge(name: name))
+          end
+        end
+
+        # Each item of a batch results page as its own Response, under the identifier it was sent
+        # with. Filed as keep_items files a page: every name is checked before the first write.
+        def results(exchange, body, schema:, feature:, archive:)
+          items = Array(body["items"])
+          names = items.map { |item| item_name(archive[:name], item[IDENTIFIER]) if archive }
+          items.zip(names).map do |item, name|
+            response = from(item_exchange(exchange, item), schema: schema, feature: feature,
+                                                           archive: (archive.merge(name: name) if name))
+            Batch::Answer.new(identifier: item[IDENTIFIER], response: response)
           end
         end
 
@@ -69,8 +83,7 @@ module EdiGem
         end
 
         # Neither the stem nor the identifier is named in the error: both are identifiers.
-        def item_name(stem, item)
-          identifier = Batch::Check.new(item).identifier
+        def item_name(stem, identifier)
           name = "#{stem}_#{identifier}"
           return name unless identifier.to_s.empty? || !name.match?(Archive::SAFE_NAME)
 

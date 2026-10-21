@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "batchId": "01JB7Q2F3K8N4X5Y6Z7A8B9C0D",
+      "submitterTransactionIdentifier": "member-7087",
+      "controlNumber": "123456789",
+      "payer": { "name": "Example Health Plan", "payorIdentification": "11111" },
+      "subscriber": { "memberId": "MOCK00000001", "firstName": "Testfirst", "lastName": "Testlast", "dateOfBirth": "19800101" },
+      "planInformation": { "groupNumber": "MOCKGROUP" },
+      "planDateInformation": { "planBegin": "20260101", "planEnd": "20261231" },
+      "benefitsInformation": [
+        { "code": "1", "name": "Active Coverage", "serviceTypeCodes": ["30"], "planCoverage": "Example Medicaid Plan" },
+        { "code": "B", "name": "Co-Payment", "serviceTypeCodes": ["30"] }
+      ],
+      "meta": { "applicationMode": "production", "traceId": "mock-trace-7087" }
+    },
+    {
+      "batchId": "01JB7Q2F3K8N4X5Y6Z7A8B9C0D",
+      "submitterTransactionIdentifier": "member-7091",
+      "controlNumber": "123456790",
+      "payer": { "name": "Example Health Plan", "payorIdentification": "22222" },
+      "subscriber": { "memberId": "MOCK00000002", "firstName": "Testfirst", "lastName": "Testlast", "dateOfBirth": "19800101" },
+      "planDateInformation": { "planBegin": "20260101" },
+      "benefitsInformation": [
+        { "code": "7", "name": "Inactive - Pending Eligibility Update", "serviceTypeCodes": ["30"] }
+      ],
+      "meta": { "applicationMode": "production", "traceId": "mock-trace-7091" }
+    }
+  ],
+  "nextPageToken": "eyJwYWdlIjoyfQ"
+}

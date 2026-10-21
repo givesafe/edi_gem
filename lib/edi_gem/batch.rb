@@ -83,6 +83,24 @@ module EdiGem
       def more? = !@next_page_token.nil?
     end
 
+    # One page of a batch's full answers, read and paged like Checks.
+    class Answers < Checks; end
+
+    # One finished check's full answer, under the identifier it was sent with.
+    class Answer
+      include Concealed
+
+      attr_reader :identifier, :response
+
+      def initialize(identifier:, response:)
+        @identifier = identifier
+        @response = response
+      end
+
+      # The response holds PHI, so only its state is printed.
+      def concealed_inspect = "#<#{self.class} #{response.state}>"
+    end
+
     # One check inside a batch. `state` is whether the source finished asking; `result` is what
     # the payer said. A COMPLETED check with an INACTIVE result is an answer; a
     # COMPLETED_WITH_ERRORS check is not.
