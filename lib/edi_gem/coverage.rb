@@ -44,10 +44,15 @@ module EdiGem
       types.nil? || types.empty? || types.include?(PLAN)
     end
 
+    # A date that is not YYYYMMDD cannot be read, and is ignored rather than guessed at.
     def within?(benefit, day)
-      begins = benefit.line_begins_on || benefit.begins_on
-      ends = benefit.line_ends_on || benefit.coverage_ends_on || benefit.ends_on
+      begins = readable(benefit.line_begins_on || benefit.begins_on)
+      ends = readable(benefit.line_ends_on || benefit.coverage_ends_on || benefit.ends_on)
       (begins.nil? || day >= begins) && (ends.nil? || day <= ends)
+    end
+
+    def readable(date)
+      date if date.to_s.match?(Codec::DAY)
     end
 
     def decide(lines)

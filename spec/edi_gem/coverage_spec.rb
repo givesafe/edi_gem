@@ -113,6 +113,12 @@ RSpec.describe EdiGem::Coverage do
     end
   end
 
+  it "ignores a plan date it cannot read" do
+    lines = [EdiGem::Benefit.new(status: :active, status_code: "1", begins_on: "garbled")]
+
+    expect(described_class.on(lines, day).status).to eq(:active)
+  end
+
   it "reads a day given as X12's YYYYMMDD" do
     lines = benefits([{ "code" => "1", "serviceTypeCodes" => ["30"] }], plan_dates: { "planEnd" => "20261231" })
 
