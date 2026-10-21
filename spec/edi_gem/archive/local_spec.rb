@@ -29,6 +29,22 @@ RSpec.describe EdiGem::Archive::Local do
 
   def path(uri) = uri.delete_prefix("file://")
 
+  describe "the bytes it writes" do
+    # Rails sets default_internal to UTF-8; a vendor body is binary until something parses it.
+    it "writes a body with a byte outside UTF-8 as it arrived, whatever the default encodings" do
+      before = Encoding.default_internal
+      Encoding.default_internal = Encoding::UTF_8
+      body = "{\"name\":\"caf\xE9\"}".b
+      binary = EdiGem::Exchange.new(method: :post, url: "https://example.test", status: 200,
+                                    request_body: "{}", response_body: body, started_at: Time.utc(2026, 3, 2))
+      written = archive.keep(binary, clearinghouse: :stedi, feature: :eligibility_check, name: "84213")
+
+      expect(File.binread(path(written.response_uri))).to eq(body)
+    ensure
+      Encoding.default_internal = before
+    end
+  end
+
   describe "where the two objects land" do
     # The request and the response have different shapes, so they get separate folders.
     it "files the question and the answer in folders of their own" do

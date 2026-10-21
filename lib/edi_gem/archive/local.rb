@@ -9,7 +9,9 @@ module EdiGem
     class Local < Archive
       def put(path, body)
         FileUtils.mkdir_p(File.dirname(path))
-        File.write(path, body)
+        # The bytes as received: an app that sets Encoding.default_internal (Rails) would otherwise
+        # transcode a body holding a byte outside its declared encoding, and fail.
+        File.binwrite(path, body)
         "file://#{File.expand_path(path)}"
       end
     end
