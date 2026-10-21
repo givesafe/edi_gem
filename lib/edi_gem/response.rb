@@ -4,6 +4,8 @@ module EdiGem
   # What came back: benefits and rejections in the shared vocabulary, the raw payload, and the
   # exchanges that carried it.
   class Response
+    include Concealed
+
     # One state per distinct next step:
     #   complete        coverage answered in full
     #   partial         benefit lines plus a rejection for part of the question
@@ -101,6 +103,11 @@ module EdiGem
 
     def not_identified?
       rejections_at(:subscriber).any? { |rejection| NOT_IDENTIFIED_CODES.include?(rejection.code) }
+    end
+
+    def concealed_inspect
+      "#<#{self.class} #{state} benefits=#{@benefits.size} rejections=#{@rejections.size} " \
+        "details=#{@details.keys.join(",")}>"
     end
   end
 end

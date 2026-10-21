@@ -87,6 +87,8 @@ module EdiGem
     # the payer said. A COMPLETED check with an INACTIVE result is an answer; a
     # COMPLETED_WITH_ERRORS check is not.
     class Check
+      include Concealed
+
       ACTIVE = "ACTIVE"
       DONE = %w[COMPLETED COMPLETED_WITH_ERRORS VALIDATION_FAILED].freeze
 
@@ -119,7 +121,7 @@ module EdiGem
       def active? = result == ACTIVE
 
       # Holds PHI, so only the state and result are printed.
-      def inspect = "#<#{self.class} #{state} #{result}>"
+      def concealed_inspect = "#<#{self.class} #{state} #{result}>"
     end
   end
 end

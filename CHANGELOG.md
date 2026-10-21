@@ -2,6 +2,11 @@
 
 All additions; no existing call changes.
 
+- `EdiGem.reveal = true` makes `inspect` and `pp` print secrets and PHI in full, for hosts with
+  no real member data and no production key. Off unless set to `true`.
+- Sources, `Source::Connection`, `Archive::Signature`, `Core::Request`, `Document` and its
+  records, and `Response` no longer print their keys, headers, bodies or details; they print
+  names, sizes and states, as `Subscriber`, `Payload` and the others already did.
 - `EdiGem::Source.for(name, **config)` builds a source by name (`:stedi`, `:office_ally`,
   `:optum`), and `Source.names` lists them. An unknown name raises `EdiGem::UnknownSource`.
 - `Policy.for(source, retry: {...})` and `Policy#with(retry: {...})` merge a caller's retry

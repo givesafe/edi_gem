@@ -7,6 +7,8 @@ module EdiGem
   #
   # Several Benefits with one payer are the several things one plan covers, not several plans.
   class Benefit
+    include Concealed
+
     # `status` and `benefit_type` are the two halves of EB01; a line carries one or the other.
     # The `matched_*` fields are what the payer holds on record for the person it matched, so a
     # caller can confirm a discovery match before using it.
@@ -41,7 +43,7 @@ module EdiGem
     end
 
     # Holds PHI, so only field names are printed, never values.
-    def inspect
+    def concealed_inspect
       "#<#{self.class} #{@attributes.keys.join(",")}>"
     end
   end

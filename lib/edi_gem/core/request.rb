@@ -10,6 +10,8 @@ module EdiGem
     #
     # A request refused at the envelope never reached a payer and is not a coverage answer.
     class Request
+      include Concealed
+
       RULE_VERSION = "2.2.0"
 
       # ProcessingMode. Batch results are retrieved by a separate call.
@@ -116,6 +118,8 @@ module EdiGem
       def escape(value)
         value.to_s.gsub("&", "&amp;").gsub("<", "&lt;").gsub(">", "&gt;")
       end
+
+      def concealed_inspect = "#<#{self.class} #{@payload_type} #{@mode} #{@payload.bytesize} bytes>"
     end
   end
 end

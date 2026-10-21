@@ -4,6 +4,8 @@ module EdiGem
   # The person being asked about. Every field is optional: which combination is required is
   # each source's search_options, checked by Inquiry#satisfies?.
   class Subscriber
+    include Concealed
+
     # date_of_birth is X12's YYYYMMDD, not an ISO date.
     attr_reader :member_id, :first_name, :last_name, :middle_name, :date_of_birth,
                 :gender, :ssn, :group_number, :relationship
@@ -42,7 +44,7 @@ module EdiGem
     end
 
     # Names and identifiers are PHI, so only which fields are set is printed.
-    def inspect
+    def concealed_inspect
       "#<#{self.class} #{to_h.keys.join(",")}>"
     end
   end

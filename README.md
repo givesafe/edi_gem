@@ -142,9 +142,12 @@ also take `trace:` on `eligibility` and refuse `archive:`.
 
 ## PHI
 
-Requests and responses carry protected health information. `inspect` on a `Subscriber`,
-`Benefit`, `Payload`, `Credential` or batch check never prints values, and error messages name
-fields, not values. Archived bodies are PHI, and so is the name you file them under: control
+Requests and responses carry protected health information, and sources hold keys. `inspect` and
+`pp` on every object holding either (a source, its connection, an S3 signature, a CORE request, a
+`Subscriber`, `Benefit`, `Payload`, `Credential`, `Exchange`, `Document`, `Response` or batch
+check) print names, sizes and states, never values, and error messages name fields, not values.
+Where there is no real member data and no production key, a host may set `EdiGem.reveal = true`
+to print them in full; it is off unless set to `true`. Archived bodies are PHI, and so is the name you file them under: control
 access to the store. Never commit real payloads; spec fixtures hold synthetic values only.
 
 ## Development

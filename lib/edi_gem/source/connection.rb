@@ -8,6 +8,8 @@ module EdiGem
     # HTTP for a source: builds the request with the vendor's standing headers, sends it through
     # a Transport per operation, and records the Exchange verbatim.
     class Connection
+      include Concealed
+
       # `headers` are sent on every request (authorization, content type). `client` replaces the
       # Net::HTTP client, for a source that needs a prepared one (a client certificate).
       def initialize(policy:, headers: {}, transport: nil, client: nil)
@@ -69,6 +71,8 @@ module EdiGem
           http.read_timeout = timeout
         end
       end
+
+      def concealed_inspect = "#<#{self.class} headers=#{@headers.keys.join(",")}>"
     end
   end
 end

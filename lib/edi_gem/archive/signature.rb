@@ -9,6 +9,8 @@ module EdiGem
   class Archive
     # AWS Signature Version 4 for S3, written out so the gem has no runtime dependencies.
     class Signature
+      include Concealed
+
       ALGORITHM = "AWS4-HMAC-SHA256"
       SERVICE = "s3"
       TERMINATOR = "aws4_request"
@@ -90,6 +92,8 @@ module EdiGem
       def hmac(key, value)
         OpenSSL::HMAC.digest("sha256", key, value)
       end
+
+      def concealed_inspect = "#<#{self.class} #{@region}>"
     end
   end
 end

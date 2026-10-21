@@ -4,6 +4,8 @@ module EdiGem
   # An addressable view over a Payload: which records sit at an address, and what value a record
   # holds for a field. Each dialect's address grammar is documented on its subclass.
   class Document
+    include Concealed
+
     def self.for(payload)
       case payload.dialect
       when :json then Document::Json.new(payload.body)
@@ -30,6 +32,8 @@ module EdiGem
 
     # A dialect's repeating unit: a JSON object, an X12 segment.
     class Record
+      include Concealed
+
       def initialize(node)
         @node = node
       end

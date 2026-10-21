@@ -2,6 +2,7 @@
 
 require_relative "edi_gem/errors"
 require_relative "edi_gem/version"
+require_relative "edi_gem/concealed"
 require_relative "edi_gem/subscriber"
 require_relative "edi_gem/provider"
 require_relative "edi_gem/credential"

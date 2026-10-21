@@ -26,6 +26,9 @@ module EdiGem
     # methods of each feature it supports. A feature method it does not override raises
     # FeatureNotSupported; check `supports?` first.
     class Base
+      # Every source holds an API key or a credential.
+      include Concealed
+
       FEATURES = %i[eligibility discovery batch].freeze
 
       # Combinations of Subscriber fields the source matches on. An inquiry must carry every

@@ -4,6 +4,8 @@ module EdiGem
   # A response body and its dialect, which picks the Document that reads it. The bytes are kept
   # exactly as they arrived.
   class Payload
+    include Concealed
+
     DIALECTS = %i[json x12 soap mime].freeze
 
     attr_reader :body, :dialect, :media_type
@@ -21,7 +23,7 @@ module EdiGem
     end
 
     # Never prints the body.
-    def inspect
+    def concealed_inspect
       "#<#{self.class} #{@dialect} #{@body.to_s.bytesize} bytes>"
     end
   end

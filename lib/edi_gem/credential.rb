@@ -5,6 +5,8 @@ module EdiGem
   # or the envelope identifiers a clearinghouse assigns at enrolment. A bag of values rather than
   # fixed fields, because the set differs per source and per payer.
   class Credential
+    include Concealed
+
     attr_reader :provider, :source, :values, :enrolled_at
 
     # provider and source are nil only on .none.
@@ -45,7 +47,7 @@ module EdiGem
     end
 
     # Values are secrets; only their keys are printed.
-    def inspect
+    def concealed_inspect
       "#<#{self.class} #{@source} provider=#{@provider&.npi} #{@values.keys.join(",")}>"
     end
   end

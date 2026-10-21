@@ -4,6 +4,8 @@ module EdiGem
   # One HTTP call, recorded verbatim: the bytes as sent and received. An inquiry can produce
   # several (a POST, then a GET for a pending answer).
   class Exchange
+    include Concealed
+
     attr_reader :method, :url, :request_headers, :request_body,
                 :status, :response_headers, :response_body,
                 :started_at, :duration
@@ -39,7 +41,7 @@ module EdiGem
     end
 
     # Bodies hold PHI and headers hold credentials, so neither is ever printed.
-    def inspect
+    def concealed_inspect
       "#<#{self.class} #{@method.to_s.upcase} #{@url} -> #{@status}>"
     end
   end
