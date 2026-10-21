@@ -144,7 +144,9 @@ end
 # Insurance discovery: an `items[]` of whole coverages, each with its own payer and subscriber.
 #
 # Discovery matches on demographics and can return false positives, so the `matched_*` fields
-# carry what the payer holds on record (name, birth date, address) for the caller to confirm.
+# carry what the payer holds on record (name, birth date, address) for the caller to confirm. When
+# the patient is a dependent, Stedi puts them in `dependent` and the policyholder in `subscriber`,
+# so the dependent is the person matched.
 EdiGem::Schema.define(:stedi_discovery) do
   benefit "items[]" do
     field :plan_number, from: "planInformation.planNumber"
@@ -168,14 +170,16 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :plan_ends_on, from: "planDateInformation.plan", codec: :rd8_end
     field :confidence, from: "confidence.level"
     field :confidence_reason, from: "confidence.reason"
-    field :matched_first_name, from: "subscriber.firstName"
-    field :matched_last_name, from: "subscriber.lastName"
-    field :matched_date_of_birth, from: "subscriber.dateOfBirth"
-    field :matched_address_line1, from: "subscriber.address.address1"
-    field :matched_address_line2, from: "subscriber.address.address2"
-    field :matched_city, from: "subscriber.address.city"
-    field :matched_state, from: "subscriber.address.state"
-    field :matched_postal_code, from: "subscriber.address.postalCode"
+    %w[subscriber dependent].reverse_each do |person|
+      field :matched_first_name, from: "#{person}.firstName"
+      field :matched_last_name, from: "#{person}.lastName"
+      field :matched_date_of_birth, from: "#{person}.dateOfBirth"
+      field :matched_address_line1, from: "#{person}.address.address1"
+      field :matched_address_line2, from: "#{person}.address.address2"
+      field :matched_city, from: "#{person}.address.city"
+      field :matched_state, from: "#{person}.address.state"
+      field :matched_postal_code, from: "#{person}.address.postalCode"
+    end
   end
 
   # A separate block, because a field is addressed relative to its own record.
@@ -189,7 +193,9 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :primary_payer_name, from: "benefitsRelatedEntities", codec: :primary_payer_name
   end
 
-  rejection "errors[]", level: :envelope do
+  # Stedi's discovery answer has only the flat list. Its `location` ("Loop 2100C") names the lane,
+  # so a subscriber not found reads as not identified rather than as a refused request.
+  rejection "errors[]", level: :envelope, fallback: true do
     field :code, from: "code", codec: :aaa03
     field :description, from: "description"
     field :field, from: "field"

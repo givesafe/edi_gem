@@ -1,0 +1,8 @@
+{
+  "meta": { "applicationMode": "production", "traceId": "01MOCKERROR000000000000" },
+  "discoveryId": "00000000-0000-4000-8000-0000000000d3",
+  "status": "ERROR",
+  "coveragesFound": 0,
+  "items": [],
+  "errors": []
+}

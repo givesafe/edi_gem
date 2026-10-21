@@ -17,6 +17,8 @@ module EdiGem
                             description: "the vendor is failing, not refusing" },
       already_in_flight: { retryable: true, level: :envelope,
                            description: "an identical request is still being processed" },
+      vendor_error: { retryable: false, level: :envelope,
+                      description: "the vendor answered that it could not complete the request" },
       payer_unavailable: { retryable: true, level: :payer,
                            description: "the vendor reached the payer and the payer did not answer" },
       not_authorized: { retryable: false, level: :envelope,

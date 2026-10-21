@@ -9,6 +9,9 @@ module EdiGem
         # A discovery's status. COMPLETE with no items is a final answer: no coverage was found.
         PENDING = "PENDING"
         COMPLETE = "COMPLETE"
+        # The vendor gave up on the request. Nothing in it is an answer, so it is a Fault, raised
+        # after the body is filed.
+        ERROR = "ERROR"
 
         def initialize(clearinghouse:, archive: nil)
           @clearinghouse = clearinghouse
@@ -36,11 +39,14 @@ module EdiGem
           payload = Payload.new(body: exchange.response_body, dialect: :json)
           reading = Reading.new(document: payload.document, schema: Schema.fetch(schema))
           status = body && body["status"]
+          stored = (kept(exchange, feature, archive) if archive)
+          refuse_error(exchange, status)
+
           Response.new(benefits: reading.benefits, rejections: reading.rejections,
                        details: reading.details, payload: payload, exchanges: [exchange],
                        handle: handle, state: (:pending if status == PENDING),
                        settled: status.nil? || status == COMPLETE,
-                       stored: (kept(exchange, feature, archive) if archive))
+                       stored: stored)
         end
 
         # Files each item of a batch page as its own object, named `<name>_<identifier>`, and
@@ -57,6 +63,10 @@ module EdiGem
         end
 
         private
+
+        def refuse_error(exchange, status)
+          raise Fault.new(kind: :vendor_error, source: @clearinghouse, status: exchange.status) if status == ERROR
+        end
 
         # Neither the stem nor the identifier is named in the error: both are identifiers.
         def item_name(stem, item)

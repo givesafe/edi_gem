@@ -1,0 +1,10 @@
+{
+  "meta": { "applicationMode": "production", "traceId": "01MOCKNOTFOUND0000000000" },
+  "discoveryId": "00000000-0000-4000-8000-0000000000d4",
+  "status": "COMPLETE",
+  "coveragesFound": 0,
+  "items": [],
+  "errors": [
+    { "code": "75", "description": "Subscriber/Insured Not Found", "followupAction": "Please Correct and Resubmit", "location": "Loop 2100C" }
+  ]
+}

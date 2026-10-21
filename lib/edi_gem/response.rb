@@ -101,8 +101,10 @@ module EdiGem
       @rejections.any? { |rejection| OUR_FAULT_LEVELS.include?(rejection.level) }
     end
 
+    # The patient may be the subscriber or a dependent of one; either one not found is the same.
     def not_identified?
-      rejections_at(:subscriber).any? { |rejection| NOT_IDENTIFIED_CODES.include?(rejection.code) }
+      %i[subscriber dependent].flat_map { |level| rejections_at(level) }
+                              .any? { |rejection| NOT_IDENTIFIED_CODES.include?(rejection.code) }
     end
 
     def concealed_inspect

@@ -251,6 +251,28 @@ RSpec.describe "calling Stedi" do
 
       expect(source.discovery(discovery_inquiry)).to_not be_test_mode
     end
+    # Stedi's discovery answer names the lane only in `location`.
+    it "is not identified when the subscriber was not found, not a refused request" do
+      source, = stedi_answering(canned("stedi_discovery_not_found"))
+      response = source.discovery(discovery_inquiry)
+
+      expect([response.state, response.rejections.map(&:level)]).to eq([:not_identified, [:subscriber]])
+    end
+
+    it "reads the matched person from the dependent when the patient is one" do
+      source, = stedi_answering(canned("stedi_discovery_dependent"))
+      coverage = source.discovery(discovery_inquiry).benefits.find(&:payer_name)
+
+      expect([coverage[:matched_first_name], coverage[:matched_date_of_birth], coverage[:matched_city],
+              coverage[:member_id]]).to eq(%w[Testfirst 20100101 Example MOCK00001])
+    end
+
+    it "raises a vendor_error, not a pending answer, when the vendor says ERROR" do
+      source, = stedi_answering(canned("stedi_discovery_error"))
+
+      expect { source.discovery(discovery_inquiry) }
+        .to raise_error(EdiGem::Fault) { |fault| expect([fault.kind, fault.retryable?]).to eq([:vendor_error, false]) }
+    end
   end
 
   describe "#resolve" do
@@ -342,6 +364,13 @@ RSpec.describe "calling Stedi" do
       source, = stedi_answering(canned("stedi_discovery_complete"), archive: archive)
       source.resolve("00000000-0000-4000-8000-0000000000d1", archive: filing)
 
+      expect(archive.kept.map(&:feature)).to eq([:discovery])
+    end
+
+    it "files the answer to a discovery the vendor gave up on before raising" do
+      source, = stedi_answering(canned("stedi_discovery_error"), archive: archive)
+
+      expect { source.resolve("00000000-0000-4000-8000-0000000000d3", archive: filing) }.to raise_error(EdiGem::Fault)
       expect(archive.kept.map(&:feature)).to eq([:discovery])
     end
 
