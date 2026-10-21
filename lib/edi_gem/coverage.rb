@@ -38,7 +38,7 @@ module EdiGem
       decide(current) || (outside.any? ? OUTSIDE_DATES : UNDECIDED)
     end
 
-    # A line that names no service type is about the plan as a whole.
+    # A status line that names no service type is about the plan as a whole.
     def about_plan?(benefit)
       types = benefit.service_types
       types.nil? || types.empty? || types.include?(PLAN)
@@ -67,8 +67,10 @@ module EdiGem
       Finding.new(status: status, code: line.status_code) if line
     end
 
+    # Only a term the payer put on 30 itself; a term naming no service type may be about anything.
     def implies_coverage?(line)
-      !line.benefit_type.nil? && !NOT_IMPLYING.include?(line.benefit_type)
+      !line.benefit_type.nil? && !NOT_IMPLYING.include?(line.benefit_type) &&
+        Array(line.service_types).include?(PLAN)
     end
   end
 end

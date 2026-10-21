@@ -84,6 +84,10 @@ RSpec.describe EdiGem::Coverage do
       expect(finding([{ "code" => "B", "serviceTypeCodes" => ["30"] }])).to eq(status: :active, code: nil)
     end
 
+    it "does not read a plan term that names no service type as implying coverage" do
+      expect(finding([{ "code" => "C" }])).to eq(status: nil, code: nil)
+    end
+
     it "reads an explicit inactive over an implied term" do
       lines = [{ "code" => "C", "serviceTypeCodes" => ["30"] }, { "code" => "6", "serviceTypeCodes" => ["30"] }]
 
