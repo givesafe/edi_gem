@@ -189,6 +189,13 @@ RSpec.describe "calling Stedi" do
         .to eq(["MEDICAID FLORIDA"])
     end
 
+    # `name` on a benefit line is the status's label ("Active Coverage"), not the plan's.
+    it "reads the plan's name from planCoverage, as a check does" do
+      source, = stedi_answering(canned("stedi_discovery_complete"))
+
+      expect(source.discovery(discovery_inquiry).benefits.filter_map(&:plan_name)).to eq(["EXAMPLE MEDICAID PLAN"])
+    end
+
     # The address the payer has on record, which may differ from the one sent.
     context "WHEN the payer returns the subscriber's address" do
       subject(:found) do

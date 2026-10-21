@@ -29,7 +29,8 @@
           "code": "1",
           "name": "Active Coverage",
           "serviceTypeCodes": ["30"],
-          "insuranceType": "MC"
+          "insuranceType": "MC",
+          "planCoverage": "EXAMPLE MEDICAID PLAN"
         }
       ],
       "confidence": { "level": "HIGH", "reason": "Name, date of birth and state matched" }

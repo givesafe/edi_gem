@@ -195,7 +195,7 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :status_code, from: "code", codec: :eb01_status_code
     field :benefit_type, from: "code", codec: :eb01_benefit
     field :service_types, from: "serviceTypeCodes", codec: :codes
-    field :plan_name, from: "name"
+    field :plan_name, from: "planCoverage"
     field :insurance_type, from: "insuranceType"
     field :primary_payer_code, from: "benefitsRelatedEntities", codec: :primary_payer_code
     field :primary_payer_name, from: "benefitsRelatedEntities", codec: :primary_payer_name
