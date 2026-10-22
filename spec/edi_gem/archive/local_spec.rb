@@ -188,4 +188,18 @@ RSpec.describe EdiGem::Archive::Local do
     expect(kept.request_uri).to be_nil
     expect(kept.response_uri).to include("/response/")
   end
+
+  describe "reading a kept body back" do
+    it "answers with the bytes written" do
+      expect(archive.fetch(stored.response_uri)).to eq(exchange.response_body)
+    end
+
+    it "raises when nothing is kept there" do
+      expect { archive.fetch("file://#{root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
+    end
+
+    it "refuses a uri that is not a file's" do
+      expect { archive.fetch("s3://warehouse/x.json") }.to raise_error(ArgumentError)
+    end
+  end
 end

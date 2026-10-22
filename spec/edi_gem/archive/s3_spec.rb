@@ -92,6 +92,29 @@ RSpec.describe EdiGem::Archive::S3 do
     def key_of(uri) = uri.delete_prefix("s3://warehouse/")
   end
 
+  describe "reading a kept body back" do
+    let(:uri) { "s3://warehouse/raw/stedi/202603/discovery/response/84213_20260302T040000000Z.json" }
+    let(:response) { Net::HTTPOK.new("1.1", "200", "OK").tap { |ok| allow(ok).to receive(:body).and_return("{}") } }
+
+    it "GETs the object, signed, and answers with its body" do
+      expect(archive.fetch(uri)).to eq("{}")
+      expect(sent.map { |request| [request.method, request.uri.path] })
+        .to eq([["GET", "/raw/stedi/202603/discovery/response/84213_20260302T040000000Z.json"]])
+      expect(sent.first["authorization"]).to start_with("AWS4-HMAC-SHA256 Credential=AKIA/")
+    end
+
+    it "raises when the bucket refuses" do
+      allow(client).to receive(:request).and_return(Net::HTTPNotFound.new("1.1", "404", "no"))
+
+      expect { archive.fetch(uri) }.to raise_error(EdiGem::ArchiveFailed, /answered 404/)
+    end
+
+    it "refuses an object in another bucket, sending nothing" do
+      expect { archive.fetch("s3://elsewhere/raw/x.json") }.to raise_error(ArgumentError, %r{not in s3://warehouse})
+      expect(sent).to be_empty
+    end
+  end
+
   describe "the connection it builds when none is handed to it" do
     let(:built) { instance_double(Net::HTTP, request: response) }
 

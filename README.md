@@ -65,6 +65,9 @@ The template must place `$DIRECTION`. The gem fills `$CLEARINGHOUSE`, `$FEATURE`
 `$YYYY`, `$MM`, `$DD`, `$YYYYMM` and `$YYYYMMDD`; any other placeholder is filled from the values
 you pass with each send. Nothing is archived unless a send asks for it.
 
+`archive.fetch(uri)` reads back a body kept at a `Stored` uri, and `stedi.archived_discovery(uri)`
+reads a kept discovery answer into a `Response` again without calling Stedi.
+
 ## Usage
 
 ```ruby

@@ -55,6 +55,12 @@ module EdiGem
                  bytes: [request, response].compact.sum(&:last))
     end
 
+    # The body a `keep` filed at `uri` (a Stored's request_uri or response_uri), as it was written.
+    # Raises ArchiveFailed when it cannot be read, and refuses a uri this archive did not make.
+    def fetch(uri)
+      raise NotImplementedError, "#{self.class} cannot read #{uri}"
+    end
+
     private
 
     # `<name>_<timestamp>.json`.

@@ -93,6 +93,18 @@ module EdiGem
                                  feature: DISCOVERY, archive: archive)
       end
 
+      # A discovery answer the archive kept (a Stored's response_uri), read again into a Response.
+      # Nothing is sent to Stedi, so nothing is billed: the answer is the one already paid for.
+      def archived_discovery(response_uri)
+        raise ArchiveNotConfigured, "no archive is configured to read a discovery from" if @archive.nil?
+
+        body = @archive.fetch(response_uri)
+        exchange = Exchange.new(method: :get, url: response_uri, status: 200, response_body: body)
+        parsed = Document::Json.parse(body)
+        responses.from(exchange, schema: DISCOVERY_SCHEMA, handle: parsed["discoveryId"], body: parsed,
+                                 feature: DISCOVERY)
+      end
+
       private
 
       def responses

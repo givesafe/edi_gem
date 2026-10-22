@@ -14,6 +14,14 @@ module EdiGem
         File.binwrite(path, body)
         "file://#{File.expand_path(path)}"
       end
+
+      def fetch(uri)
+        raise ArgumentError, "#{uri} is not a local archive's" unless uri.to_s.start_with?("file://")
+
+        File.binread(uri.to_s.delete_prefix("file://"))
+      rescue SystemCallError => error
+        raise ArchiveFailed, "#{uri} could not be read (#{error.class})"
+      end
     end
   end
 end

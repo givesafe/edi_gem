@@ -51,7 +51,24 @@ module EdiGem
         answer(reach(request, path), path)
       end
 
+      def fetch(uri)
+        path = uri.to_s.delete_prefix("s3://#{bucket}/")
+        raise ArgumentError, "#{uri} is not in s3://#{bucket}" if path == uri.to_s
+
+        response = reach(signed_get(path), path)
+        return response.body if response.is_a?(Net::HTTPSuccess)
+
+        raise ArchiveFailed, "s3://#{bucket}/#{path} answered #{response.code}"
+      end
+
       private
+
+      def signed_get(path)
+        request = Net::HTTP::Get.new(URI.join(endpoint, "/#{path}"))
+        @signature.headers_for(method: :get, uri: request.uri, body: "")
+                  .each { |name, value| request[name] = value }
+        request
+      end
 
       # A network failure is raised as ArchiveFailed, like a refused write.
       def reach(request, path)

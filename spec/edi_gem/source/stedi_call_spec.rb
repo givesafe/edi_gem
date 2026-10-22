@@ -352,6 +352,30 @@ RSpec.describe "calling Stedi" do
     end
   end
 
+  describe "#archived_discovery" do
+    around do |example|
+      Dir.mktmpdir("edi-archive") { |dir| @root = dir and example.run }
+    end
+
+    let(:archive) { EdiGem::Archive::Local.new(template: "#{@root}/$FEATURE/$DIRECTION") }
+
+    it "reads a kept answer again, the address the payer holds included, and sends nothing more" do
+      source, transport = stedi_answering(canned("stedi_discovery_complete"), archive: archive)
+      kept = source.discovery(discovery_inquiry, archive: { name: "discovery-1" })
+
+      read = source.archived_discovery(kept.stored.response_uri)
+
+      expect([read.state, read.found_plans.first.person.address.postal_code]).to eq([:complete, "00000"])
+      expect(transport.paths.size).to eq(1)
+    end
+
+    it "refuses when no archive is configured" do
+      source, = stedi_answering
+
+      expect { source.archived_discovery("file:///kept.json") }.to raise_error(EdiGem::ArchiveNotConfigured)
+    end
+  end
+
   # Answered with success, so already charged for, and a caller rescuing this gem has to be able to
   # record it rather than ask again.
   describe "an answer whose body is not JSON" do
