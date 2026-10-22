@@ -182,6 +182,16 @@ RSpec.describe "calling Stedi" do
       expect(transport.paths).to eq(["/2024-04-01/insurance-discovery/check/v1"])
     end
 
+    it "sends the address asked with, as Stedi names it" do
+      address = EdiGem::Address.new(line1: "1 Example St", postal_code: "40000")
+      subscriber = EdiGem::Subscriber.new(first_name: "Testfirst", address: address)
+      inquiry = EdiGem::Inquiry::Discovery.new(subscriber: subscriber, provider: discovery_inquiry.provider,
+                                               as_of: "20260901")
+
+      expect(EdiGem::Source::Stedi.new(api_key: "test_key").discovery_body(inquiry)[:subscriber][:address])
+        .to eq(address1: "1 Example St", postalCode: "40000")
+    end
+
     it "reads a found coverage out of the items list" do
       source, = stedi_answering(canned("stedi_discovery_complete"))
 
@@ -200,22 +210,71 @@ RSpec.describe "calling Stedi" do
     context "WHEN the payer returns the subscriber's address" do
       subject(:found) do
         source, = stedi_answering(canned("stedi_discovery_complete"))
-        source.discovery(discovery_inquiry).benefits.find(&:payer_name)
+        source.discovery(discovery_inquiry).found_plans.first.person.address
       end
 
       it "reads the street lines" do
-        expect([found.matched_address_line1, found.matched_address_line2])
-          .to eq(["123 Example St", "Apt 4"])
+        expect([found.line1, found.line2]).to eq(["123 Example St", "Apt 4"])
       end
 
       it "reads the city, state and postal code" do
-        expect([found.matched_city, found.matched_state, found.matched_postal_code])
-          .to eq(%w[Testville ZZ 00000])
+        expect([found.city, found.state, found.postal_code]).to eq(%w[Testville ZZ 00000])
       end
 
       it "never prints the address when inspected" do
         expect(found.inspect).to_not include("Example St", "Testville")
       end
+    end
+
+    # Each item is one coverage: its own payer, benefit lines and people.
+    describe "the plans found" do
+      subject(:plan) do
+        source, = stedi_answering(canned("stedi_discovery_complete"))
+        source.discovery(discovery_inquiry).found_plans.tap { |plans| expect(plans.size).to eq(1) }.first
+      end
+
+      it "reads the plan's payer and member id" do
+        expect([plan.payer_code, plan.member_id, plan[:payer_name]]).to eq([plan.benefits.first.payer_code,
+                                                                            plan.benefits.first.member_id,
+                                                                            "MEDICAID FLORIDA"])
+      end
+
+      it "keeps the plan's benefit lines" do
+        expect(plan.benefits).to all(be_a(EdiGem::Benefit))
+      end
+
+      it "names the policyholder as the person matched when there is no dependent" do
+        expect([plan.person.role, plan.dependent_people]).to eq([:subscriber, []])
+      end
+
+      it "puts no discovery person on the response itself" do
+        source, = stedi_answering(canned("stedi_discovery_complete"))
+
+        expect(source.discovery(discovery_inquiry).people).to eq([])
+      end
+    end
+
+    it "keeps two found plans apart, each with its own people" do
+      two = JSON.parse(canned("stedi_discovery_dependent").body)
+      other = JSON.parse(JSON.generate(two["items"].first))
+      other["payer"]["payorIdentification"] = "00002"
+      other.delete("dependent")
+      two["items"] << other
+      source, = stedi_answering(canned_body(two))
+      plans = source.discovery(discovery_inquiry).found_plans
+
+      expect(plans.map { |plan| [plan.payer_code, plan.people.map(&:role), plan.person.relationship_code] })
+        .to eq([["00001", %i[subscriber dependent], "19"], ["00002", [:subscriber], "18"]])
+    end
+
+    # The old reading took each field from the dependent, else the policyholder, one at a time.
+    it "never fills the person matched from the policyholder" do
+      body = JSON.parse(canned("stedi_discovery_dependent").body)
+      body["items"].first["dependent"].delete("address")
+      body["items"].first["subscriber"]["address"] = { "city" => "Elsewhere" }
+      source, = stedi_answering(canned_body(body))
+
+      expect(source.discovery(discovery_inquiry).found_plans.first.person.address).to be_nil
     end
 
     # Discovery matches on demographics and Stedi documents false positives, so a caller has to
@@ -268,10 +327,10 @@ RSpec.describe "calling Stedi" do
 
     it "reads the matched person from the dependent when the patient is one" do
       source, = stedi_answering(canned("stedi_discovery_dependent"))
-      coverage = source.discovery(discovery_inquiry).benefits.find(&:payer_name)
+      plan = source.discovery(discovery_inquiry).found_plans.first
 
-      expect([coverage[:matched_first_name], coverage[:matched_date_of_birth], coverage[:matched_city],
-              coverage[:member_id]]).to eq(%w[Testfirst 20100101 Example MOCK00001])
+      expect([plan.person.first_name, plan.person.date_of_birth, plan.person.address.city, plan.member_id])
+        .to eq(%w[Testfirst 20100101 Example MOCK00001])
     end
 
     it "raises a vendor_error, not a pending answer, when the vendor says ERROR" do

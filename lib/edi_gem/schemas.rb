@@ -216,10 +216,8 @@ end
 
 # Insurance discovery: an `items[]` of whole coverages, each with its own payer and subscriber.
 #
-# Discovery matches on demographics and can return false positives, so the `matched_*` fields
-# carry what the payer holds on record (name, birth date, address) for the caller to confirm. When
-# the patient is a dependent, Stedi puts them in `dependent` and the policyholder in `subscriber`,
-# so the dependent is the person matched.
+# Discovery matches on demographics and can return false positives, so each FoundPlan carries the
+# people the payer holds on record (name, birth date, address) for the caller to confirm.
 EdiGem::Schema.define(:stedi_discovery) do
   benefit "items[]" do
     field :plan_number, from: "planInformation.planNumber"
@@ -244,19 +242,26 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :coverage_ends_on, from: "planDateInformation", codec: :span_end
     field :confidence, from: "confidence.level"
     field :confidence_reason, from: "confidence.reason"
-    %w[subscriber dependent].reverse_each do |person|
-      field :matched_first_name, from: "#{person}.firstName"
-      field :matched_last_name, from: "#{person}.lastName"
-      field :matched_middle_name, from: "#{person}.middleName"
-      field :matched_date_of_birth, from: "#{person}.dateOfBirth"
-      field :matched_relationship_code, from: "#{person}.relationToSubscriberCode"
-      field :matched_maintenance_type_code, from: "#{person}.maintenanceTypeCode"
-      field :matched_maintenance_reason_code, from: "#{person}.maintenanceReasonCode"
-      field :matched_address_line1, from: "#{person}.address.address1"
-      field :matched_address_line2, from: "#{person}.address.address2"
-      field :matched_city, from: "#{person}.address.city"
-      field :matched_state, from: "#{person}.address.state"
-      field :matched_postal_code, from: "#{person}.address.postalCode"
+  end
+
+  # Each item is one coverage, read apart with its own people (FoundPlan), so a dependent's
+  # missing field is never filled from the policyholder's.
+  found_plan "items[]"
+  { "items[].subscriber" => :subscriber, "items[].dependent" => :dependent }.each do |address, role|
+    person address, role: role do
+      field :first_name, from: "firstName"
+      field :last_name, from: "lastName"
+      field :middle_name, from: "middleName"
+      field :date_of_birth, from: "dateOfBirth"
+      field :member_id, from: "memberId"
+      field :relationship_code, from: "relationToSubscriberCode"
+      field :maintenance_type_code, from: "maintenanceTypeCode"
+      field :maintenance_reason_code, from: "maintenanceReasonCode"
+      field :address_line1, from: "address.address1"
+      field :address_line2, from: "address.address2"
+      field :city, from: "address.city"
+      field :state, from: "address.state"
+      field :postal_code, from: "address.postalCode"
     end
   end
 

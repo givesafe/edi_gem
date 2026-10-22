@@ -8,14 +8,14 @@ module EdiGem
 
     # date_of_birth is X12's YYYYMMDD, not an ISO date.
     attr_reader :member_id, :first_name, :last_name, :middle_name, :date_of_birth,
-                :gender, :ssn, :group_number, :relationship
+                :gender, :ssn, :group_number, :relationship, :address
 
     # `relationship` is the X12 subscriber relationship; :self means the patient is the
     # subscriber. A dependent's is :spouse, :child, :other_adult, or nil when not known (it is
-    # then not sent).
+    # then not sent). `address` is an Address, sent to Stedi only; an X12 source does not send it.
     def initialize(member_id: nil, first_name: nil, last_name: nil, middle_name: nil,
                    date_of_birth: nil, gender: nil, ssn: nil, group_number: nil,
-                   relationship: :self)
+                   relationship: :self, address: nil)
       @member_id = member_id
       @first_name = first_name
       @last_name = last_name
@@ -25,6 +25,7 @@ module EdiGem
       @ssn = ssn
       @group_number = group_number
       @relationship = relationship
+      @address = address
     end
 
     RELATIONSHIP_CODES = { self: "18", spouse: "01", child: "19", other: "G8",
@@ -47,7 +48,7 @@ module EdiGem
     def to_h
       { memberId: @member_id, firstName: Identity.plain(@first_name),
         lastName: Identity.plain(@last_name), dateOfBirth: @date_of_birth, gender: @gender,
-        ssn: @ssn, groupNumber: @group_number }.compact
+        ssn: @ssn, groupNumber: @group_number, address: @address&.to_stedi_h }.compact
     end
 
     # The X12 code for a dependent's relationship, or nil when it is not one a 270 can name.

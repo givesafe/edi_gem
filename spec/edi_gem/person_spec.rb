@@ -22,6 +22,17 @@ RSpec.describe EdiGem::Person do
     expect(other).not_to be_identity_corrected
   end
 
+  it "holds the address the payer has on record" do
+    found = described_class.new(role: :subscriber, address_line1: "1 Example St", city: "Example",
+                                postal_code: "40000")
+
+    expect(found.address.to_h).to eq(line1: "1 Example St", city: "Example", postal_code: "40000")
+  end
+
+  it "holds no address when the payer sent none" do
+    expect(person.address).to be_nil
+  end
+
   it "gives the fields an identity comparison reads" do
     expect(person.identity).to eq(first_name: "TESTFIRST", last_name: "TESTLAST",
                                   date_of_birth: "20100101")

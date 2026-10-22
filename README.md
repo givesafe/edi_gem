@@ -107,10 +107,11 @@ An identifier that is not a safe file name (or is missing) raises `ArgumentError
 is written, so a page is filed whole or not at all. Reading a page again files it again, as new
 objects. `raw` and the archived bodies are PHI.
 
-Discovery benefits carry the address the payer has on record: `matched_address_line1`,
-`matched_address_line2`, `matched_city`, `matched_state` and `matched_postal_code`. They also
-carry `matched_first_name`, `matched_middle_name`, `matched_last_name`, `matched_date_of_birth`,
-`matched_relationship_code` and the maintenance codes of the person matched.
+A discovery's `found_plans` are the coverages it found, one per item, each read apart: its
+`benefits`, its `people`, and `person`, who the payer matched (the dependent when there is one,
+else the policyholder) as the payer holds them on record, address included. `identify(asked)`
+compares that person with who was asked about, and `coverage_on(date)` applies the two-part test
+to that plan alone. A `Subscriber` takes an `address:` (an `EdiGem::Address`), which Stedi is sent.
 
 ## Dependents, and who the payer answered about
 

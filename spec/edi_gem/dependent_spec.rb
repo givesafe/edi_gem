@@ -214,7 +214,7 @@ RSpec.describe "asking about a dependent" do
       found = source.discovery(EdiGem::Inquiry::Discovery.new(subscriber: patient, provider: provider,
                                                               as_of: "20260901"))
 
-      expect(found.benefits.filter_map(&:matched_relationship_code)).to eq(["19"])
+      expect(found.found_plans.map { |plan| plan.person.relationship_code }).to eq(["19"])
     end
   end
 end

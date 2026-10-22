@@ -35,6 +35,11 @@ module CannedSource
                body: File.read(File.join(FIXTURES, "#{fixture}.json")))
   end
 
+  # A fixture changed for one example.
+  def canned_body(json, status: 200)
+    Answer.new(code: status.to_s, headers: {}, body: JSON.generate(json))
+  end
+
   # `archive:` defaults to nothing rather than to what the environment configures, so a machine
   # with EDI_ARCHIVE_TEMPLATE set in its shell profile does not quietly give every spec in this suite
   # a real archive writing real files.

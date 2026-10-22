@@ -36,7 +36,7 @@ module EdiGem
     # One field: its name, its path in the vendor's record, and an optional codec.
     Field = Struct.new(:name, :from, :codec, keyword_init: true)
 
-    attr_reader :name, :benefits, :rejections, :details, :people
+    attr_reader :name, :benefits, :rejections, :details, :people, :found_plans
 
     def initialize(name)
       @name = name.to_sym
@@ -44,6 +44,7 @@ module EdiGem
       @rejections = []
       @details = []
       @people = []
+      @found_plans = []
     end
 
     def benefit(address, &block)
@@ -64,6 +65,12 @@ module EdiGem
     # :dependent; the fields are Person's.
     def person(address, role:, &block)
       @people << build(address, role, block)
+    end
+
+    # Where each record is one whole coverage a discovery found (Reading#found_plans). The
+    # benefits and people under it are read by their own blocks.
+    def found_plan(address)
+      @found_plans << address
     end
 
     private

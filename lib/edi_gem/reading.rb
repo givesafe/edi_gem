@@ -9,12 +9,16 @@ module EdiGem
       @schema = schema
     end
 
+    # Everything the schema reads, as Response takes it.
+    def parts
+      { benefits: benefits, rejections: rejections, people: people, found_plans: found_plans, details: details }
+    end
+
     # One Benefit per benefit line. Each schema block reads a fragment (payer, subscriber, plan,
     # line); fragments are reassembled by position, and a fragment whose position another one
     # extends is folded into that deeper one.
     def benefits
-      fragments = @schema.benefits.flat_map { |mapping| placed(mapping) }
-      leaves(fragments).map { |at| Benefit.new(assembled(fragments, at)) }
+      placed_benefits.map(&:last)
     end
 
     # Lane addresses first, then only what a fallback (flattened) list adds beyond them, so no
@@ -29,9 +33,15 @@ module EdiGem
     # One Person per role and position: an X12 person is spread over NM1, DMG and INS at one
     # level, so the fragments one role finds at one position are one person. Subscriber first.
     def people
-      person_fragments.group_by(&:first)
-                      .filter_map { |(role, _), fragments| person(role, fragments.map(&:last)) }
-                      .sort_by { |found| found.dependent? ? 1 : 0 }
+      people_from(person_fragments.reject { |(_, at), _| plan_positions.any? { |plan| under?(at, plan) } })
+    end
+
+    # One FoundPlan per coverage a discovery found, with only the benefits and people under it.
+    def found_plans
+      plan_positions.map do |plan|
+        FoundPlan.new(benefits: placed_benefits.filter_map { |at, benefit| benefit if under?(at, plan) },
+                      people: people_from(person_fragments.select { |(_, at), _| under?(at, plan) }))
+      end
     end
 
     def details
@@ -42,6 +52,25 @@ module EdiGem
     end
 
     private
+
+    def placed_benefits
+      @placed_benefits ||= begin
+        fragments = @schema.benefits.flat_map { |mapping| placed(mapping) }
+        leaves(fragments).map { |at| [at, Benefit.new(assembled(fragments, at))] }
+      end
+    end
+
+    def plan_positions
+      @plan_positions ||= @schema.found_plans.flat_map { |address| @document.locate(address).map(&:first) }
+    end
+
+    def under?(at, place) = at.first(place.length) == place
+
+    def people_from(fragments)
+      fragments.group_by(&:first)
+               .filter_map { |(role, _), found| person(role, found.map(&:last)) }
+               .sort_by { |found| found.dependent? ? 1 : 0 }
+    end
 
     def person_fragments
       @schema.people.flat_map do |mapping|
@@ -70,7 +99,7 @@ module EdiGem
     # Everything at this position or above it, shallowest first, so the deeper fragment wins a
     # field both carry.
     def assembled(fragments, at)
-      fragments.select { |place, _| at.first(place.length) == place }
+      fragments.select { |place, _| under?(at, place) }
                .group_by { |place, _| place.length }.sort.flat_map(&:last)
                .reduce({}) { |found, (_, attributes)| found.merge(attributes) }
     end

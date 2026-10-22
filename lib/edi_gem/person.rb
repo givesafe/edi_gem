@@ -8,7 +8,7 @@ module EdiGem
   # 19 child, 20 employee, 21 unknown, 39 organ donor, 40 cadaver donor, 53 life partner or G8
   # other. A dependent's member_id is never sent: theirs is the subscriber's. The maintenance
   # codes 001 and 25 say the payer changed identifying information it was sent (CAQH CORE 258
-  # returns the name it holds this way).
+  # returns the name it holds this way). `address` is the one the payer holds, or nil.
   class Person
     include Concealed
 
@@ -18,13 +18,17 @@ module EdiGem
 
     FIELDS = %i[first_name last_name middle_name date_of_birth member_id relationship_code
                 maintenance_type_code maintenance_reason_code].freeze
+    # The fields a schema reads an address into, by the Address field each fills.
+    ADDRESS_FIELDS = { address_line1: :line1, address_line2: :line2, city: :city, state: :state,
+                       postal_code: :postal_code }.freeze
 
-    attr_reader(*FIELDS, :role)
+    attr_reader(*FIELDS, :role, :address)
 
     # `role` is :subscriber or :dependent, the part of the answer the person came back in.
     def initialize(role:, **fields)
       @role = role
       FIELDS.each { |field| instance_variable_set(:"@#{field}", fields[field]) }
+      @address = Address.from(**ADDRESS_FIELDS.to_h { |from, to| [to, fields[from]] })
     end
 
     def dependent? = @role == :dependent
@@ -40,6 +44,7 @@ module EdiGem
 
     def concealed_inspect
       set = FIELDS.select { |field| public_send(field) }
+      set << :address if @address
       "#<#{self.class} #{@role} #{set.join(",")}>"
     end
   end

@@ -12,19 +12,12 @@ module EdiGem
     # `status` and `benefit_type` are the two halves of EB01; a line carries one or the other, and
     # `status_code` the EB01 status itself. `coverage_ends_on` is the earliest of the plan's ends,
     # and `line_begins_on` and `line_ends_on` the line's own dates (see Coverage).
-    # The `matched_*` fields are what the payer holds on record for the person it matched, so a
-    # caller can confirm a discovery match before using it.
     CORE_FIELDS = %i[status status_code benefit_type
                      plan_name plan_number group_description member_id state_insurance_id
                      payer_name payer_code primary_payer_code primary_payer_name
                      service_types insurance_type in_network begins_on ends_on coverage_ends_on
                      line_begins_on line_ends_on
-                     share_of_cost confidence confidence_reason
-                     matched_first_name matched_last_name matched_middle_name
-                     matched_date_of_birth matched_relationship_code
-                     matched_maintenance_type_code matched_maintenance_reason_code
-                     matched_address_line1 matched_address_line2 matched_city matched_state
-                     matched_postal_code].freeze
+                     share_of_cost confidence confidence_reason].freeze
 
     CORE_FIELDS.each { |field| define_method(field) { @attributes[field] } }
 

@@ -25,11 +25,18 @@ module EdiGem
     TEST_MODE = "test"
 
     attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored,
-                :people
+                :people, :found_plans
 
     # Who the payer answered about, and how they compare with who was asked about. `person` is
     # nil when the answer named nobody.
     Identification = Struct.new(:person, :result, keyword_init: true) do
+      # `person` compared with `asked` (Identity.compare's options); nobody compares with nothing.
+      def self.of(person, asked, **options)
+        new(person: person, result: Identity.compare(asked: asked, returned: person&.identity || {},
+                                                     corrected: person&.identity_corrected? || false,
+                                                     **options))
+      end
+
       # The payer answered about the patient in the other part of the answer than asked: a
       # dependent asked as the subscriber, or the other way round.
       def moved?(as_dependent)
@@ -37,11 +44,13 @@ module EdiGem
       end
     end
 
-    def initialize(benefits: [], rejections: [], payload: nil, exchanges: [], handle: nil,
-                   state: nil, details: {}, settled: false, stored: nil, people: [])
+    # One field for each part of an answer, so it runs one line past the length rule.
+    def initialize(benefits: [], rejections: [], payload: nil, exchanges: [], handle: nil, # rubocop:disable Metrics/MethodLength
+                   state: nil, details: {}, settled: false, stored: nil, people: [], found_plans: [])
       @benefits = benefits
       @rejections = rejections
       @people = people
+      @found_plans = found_plans
       @payload = payload
       @exchanges = exchanges
       @handle = handle
@@ -74,7 +83,8 @@ module EdiGem
       @state ||= derive_state
     end
 
-    # The policyholder the answer names, or nil.
+    # The policyholder the answer names, or nil. `people` are an eligibility answer's; a
+    # discovery's are each on their own FoundPlan.
     def subscriber_person
       @people.find { |person| !person.dependent? }
     end
@@ -93,9 +103,8 @@ module EdiGem
     # dependent asked about and no dependent back means the payer answered about the subscriber.
     def identify(asked, as_dependent: false, **options)
       order = [subscriber_person, *dependent_people].compact
-      compared = (as_dependent ? order.rotate : order).map { |person| compared(person, asked, options) }
-      compared.find { |found| found.result.matched? } || compared.first ||
-        Identification.new(person: nil, result: Identity.compare(asked: asked, returned: {}))
+      compared = (as_dependent ? order.rotate : order).map { |person| Identification.of(person, asked, **options) }
+      compared.find { |found| found.result.matched? } || compared.first || Identification.of(nil, asked)
     end
 
     def rejections_at(level)
@@ -116,12 +125,6 @@ module EdiGem
     end
 
     private
-
-    def compared(person, asked, options)
-      Identification.new(person: person, result: Identity.compare(
-        asked: asked, returned: person.identity, corrected: person.identity_corrected?, **options
-      ))
-    end
 
     # An empty answer with a handle is pending unless the source said it is settled; only a
     # settled empty answer is no_coverage.

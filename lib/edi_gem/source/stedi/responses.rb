@@ -44,11 +44,10 @@ module EdiGem
           stored = (kept(exchange, feature, archive) if archive)
           refuse_error(exchange, status)
 
-          Response.new(benefits: reading.benefits, rejections: reading.rejections, people: reading.people,
-                       details: reading.details, payload: payload, exchanges: [exchange],
-                       handle: handle, state: (:pending if status == PENDING),
-                       settled: status.nil? || status == COMPLETE,
-                       stored: stored)
+          Response.new(**reading.parts, payload: payload, exchanges: [exchange],
+                                        handle: handle, state: (:pending if status == PENDING),
+                                        settled: status.nil? || status == COMPLETE,
+                                        stored: stored)
         end
 
         # Files each item of a batch page as its own object, named `<name>_<identifier>`, and
