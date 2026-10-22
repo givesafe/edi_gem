@@ -115,7 +115,7 @@ module EdiGem
         reading = Reading.new(document: payload.document, schema: Schema.fetch(SCHEMA))
         Response.new(benefits: reading.benefits,
                      rejections: envelope_rejections(payload.document) + reading.rejections,
-                     details: reading.details.merge(trace_id: trace),
+                     details: reading.details.merge(trace_id: trace), people: reading.people,
                      payload: payload, exchanges: [exchange], settled: true)
       end
 

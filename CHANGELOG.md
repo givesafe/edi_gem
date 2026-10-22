@@ -1,5 +1,20 @@
 ## [Unreleased]
 
+- Names are sent in capitals without accents (`Identity.plain`), in Stedi bodies and in a 270.
+  This changes what an existing call sends; payers differ on accents, so none are sent.
+- `Inquiry` takes `dependent:`, the patient when they are on the subscriber's policy. Stedi sends
+  it as the one `dependents` entry (with `individualRelationshipCode` when the relationship is
+  :spouse, :child or :other_adult); a 270 writes it at the dependent level (HL 23, NM1*03, INS)
+  with the trace, plan date and service types. A discovery refuses one.
+- `Response#people`, `#subscriber_person`, `#dependent_people` and `#identify`: who the answer
+  names (`EdiGem::Person`, with the relationship and maintenance codes), and which of them is the
+  person asked about. `Schema#person` declares where a schema finds them.
+- `EdiGem::Identity.compare`: the field-by-field comparison `identify` uses, for a caller to use on
+  its own records too.
+- The `:stedi` schema reads `dependents[].aaaErrors` in the dependent lane. The `:x12_271` schema
+  reads a dependent's lines, dates and refusals (2110D, 2100D). Discovery benefits carry the
+  matched person's middle name, relationship code and maintenance codes.
+
 All additions; one existing call changes: a Stedi check to a payer `sources.yml` declares as
 needing a credential (Medi-Cal, `100065`) now raises `EdiGem::CredentialMissing` before it is
 sent when no credential is given, as an inquiry's `required_credentials` already did.

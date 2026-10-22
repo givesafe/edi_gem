@@ -108,7 +108,43 @@ is written, so a page is filed whole or not at all. Reading a page again files i
 objects. `raw` and the archived bodies are PHI.
 
 Discovery benefits carry the address the payer has on record: `matched_address_line1`,
-`matched_address_line2`, `matched_city`, `matched_state` and `matched_postal_code`.
+`matched_address_line2`, `matched_city`, `matched_state` and `matched_postal_code`. They also
+carry `matched_first_name`, `matched_middle_name`, `matched_last_name`, `matched_date_of_birth`,
+`matched_relationship_code` and the maintenance codes of the person matched.
+
+## Dependents, and who the payer answered about
+
+A real-time answer covers only the patient asked about. Someone on another person's policy who
+the payer cannot identify on their own is asked about as a dependent: the subscriber carries the
+policy's member id, and `dependent:` the patient. Stedi takes one dependent per check; a
+discovery cannot take one.
+
+```ruby
+family = EdiGem::Subscriber.new(member_id: "ABC123")
+child = EdiGem::Subscriber.new(first_name: "Leo", last_name: "Garcia", date_of_birth: "20100101",
+                               relationship: :child) # :spouse, :child, :other_adult, or nil
+inquiry = EdiGem::Inquiry::Eligibility.new(payer_code: "12345", subscriber: family,
+                                           dependent: child, provider: provider)
+response = stedi.eligibility(inquiry)
+
+response.subscriber_person   # => #<EdiGem::Person subscriber ...>, the policyholder
+response.dependent_people    # => [#<EdiGem::Person dependent ...>]
+found = response.identify({ first_name: "Leo", last_name: "Garcia", date_of_birth: "20100101" },
+                          as_dependent: true)
+found.person                 # who the payer answered about, or nil
+found.result.outcome         # => :matched, :mismatched or :not_compared
+found.result.fields          # => { first_name: :matched, last_name: :matched, date_of_birth: :differs }
+found.moved?(true)           # the payer put the patient in the other part than asked
+```
+
+A payer may move the patient between the subscriber and dependent parts, or ignore a dependent
+and answer about the subscriber, so `identify` compares the part asked about first, then the
+other. `EdiGem::Identity.compare` is the comparison: names are normalized (accents, case,
+punctuation, CORE 258's suffixes), a last name may be one of two, a first name may drop a second
+name, and a name of at least eight characters may come back cut short. Another name, a nickname
+or a different birth date differs. A payer's 001/25 (it corrected the identity it was sent)
+counts its spelling of the names when the birth date matches. Names are sent as
+`Identity.plain` spells them: no accents, in capitals.
 
 ## Response states
 

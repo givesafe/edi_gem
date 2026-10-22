@@ -36,13 +36,14 @@ module EdiGem
     # One field: its name, its path in the vendor's record, and an optional codec.
     Field = Struct.new(:name, :from, :codec, keyword_init: true)
 
-    attr_reader :name, :benefits, :rejections, :details
+    attr_reader :name, :benefits, :rejections, :details, :people
 
     def initialize(name)
       @name = name.to_sym
       @benefits = []
       @rejections = []
       @details = []
+      @people = []
     end
 
     def benefit(address, &block)
@@ -57,6 +58,12 @@ module EdiGem
 
     def rejection(address, level:, fallback: false, &block)
       @rejections << build(address, level, block, fallback: fallback)
+    end
+
+    # The people the answer names: the subscriber, and any dependents. `role` is :subscriber or
+    # :dependent; the fields are Person's.
+    def person(address, role:, &block)
+      @people << build(address, role, block)
     end
 
     private

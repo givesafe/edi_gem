@@ -10,10 +10,16 @@ module EdiGem
       # code per inquiry: some payers answer only the first of several.
       PLAN_COVERAGE = "30"
 
-      attr_reader :subscriber, :provider, :as_of, :service_type_codes
+      attr_reader :subscriber, :dependent, :provider, :as_of, :service_type_codes
 
-      def initialize(subscriber:, provider:, as_of: nil, service_type_codes: [PLAN_COVERAGE])
+      # `dependent` is the patient when they are on the subscriber's policy and the payer cannot
+      # identify them on their own: `subscriber` then carries the policy's member id, and
+      # `dependent` the patient's names and birth date. Someone with their own member id, even one
+      # that differs from the family's by a suffix, is asked about as the subscriber.
+      def initialize(subscriber:, provider:, as_of: nil, service_type_codes: [PLAN_COVERAGE],
+                     dependent: nil)
         @subscriber = subscriber
+        @dependent = dependent
         @provider = provider
         @as_of = as_of
         @service_type_codes = service_type_codes
@@ -27,9 +33,23 @@ module EdiGem
         date.respond_to?(:strftime) ? date.strftime("%Y%m%d") : date.to_s
       end
 
-      # Whether the subscriber carries every field of at least one of the source's options.
+      def dependent? = !@dependent.nil?
+
+      # The person asked about: the dependent when there is one.
+      def patient = @dependent || @subscriber
+
+      # Whether the inquiry carries every field of at least one of the source's options. With a
+      # dependent, the member id is the subscriber's and the rest the dependent's.
       def satisfies?(search_options)
-        search_options.any? { |option| option.all? { |field| @subscriber.public_send(field) } }
+        search_options.any? { |option| option.all? { |field| searched(field) } }
+      end
+
+      private
+
+      def searched(field)
+        return @subscriber.public_send(field) if @dependent.nil? || field == :member_id
+
+        @dependent.public_send(field)
       end
     end
 
@@ -61,6 +81,10 @@ module EdiGem
       def initialize(as_of:, **base)
         raise ArgumentError, "as_of is required on a discovery: name the date to ask about" if
           as_of.nil?
+        if base[:dependent]
+          raise ArgumentError, "a discovery cannot ask about a dependent: send the patient as " \
+                               "the subscriber"
+        end
 
         super
       end

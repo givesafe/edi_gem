@@ -24,12 +24,24 @@ module EdiGem
 
     TEST_MODE = "test"
 
-    attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored
+    attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored,
+                :people
+
+    # Who the payer answered about, and how they compare with who was asked about. `person` is
+    # nil when the answer named nobody.
+    Identification = Struct.new(:person, :result, keyword_init: true) do
+      # The payer answered about the patient in the other part of the answer than asked: a
+      # dependent asked as the subscriber, or the other way round.
+      def moved?(as_dependent)
+        !person.nil? && result.matched? && person.dependent? != as_dependent
+      end
+    end
 
     def initialize(benefits: [], rejections: [], payload: nil, exchanges: [], handle: nil,
-                   state: nil, details: {}, settled: false, stored: nil)
+                   state: nil, details: {}, settled: false, stored: nil, people: [])
       @benefits = benefits
       @rejections = rejections
+      @people = people
       @payload = payload
       @exchanges = exchanges
       @handle = handle
@@ -62,6 +74,30 @@ module EdiGem
       @state ||= derive_state
     end
 
+    # The policyholder the answer names, or nil.
+    def subscriber_person
+      @people.find { |person| !person.dependent? }
+    end
+
+    def dependent_people
+      @people.select(&:dependent?)
+    end
+
+    # Who of the people on the answer is the one asked about. `asked` is a hash of first_name,
+    # last_name and date_of_birth; `as_dependent` whether they were sent as a dependent.
+    #
+    # An answer can name the subscriber and their dependents together, and a payer may move the
+    # patient between the two (X12 RFI 975), or ignore a dependent and answer about the
+    # subscriber. So the part asked about is compared first, then the other; the first person who
+    # matches is the one. When nobody matches, the part asked about is the one reported: a
+    # dependent asked about and no dependent back means the payer answered about the subscriber.
+    def identify(asked, as_dependent: false, **options)
+      order = [subscriber_person, *dependent_people].compact
+      compared = (as_dependent ? order.rotate : order).map { |person| compared(person, asked, options) }
+      compared.find { |found| found.result.matched? } || compared.first ||
+        Identification.new(person: nil, result: Identity.compare(asked: asked, returned: {}))
+    end
+
     def rejections_at(level)
       @rejections.select { |rejection| rejection.level == level }
     end
@@ -80,6 +116,12 @@ module EdiGem
     end
 
     private
+
+    def compared(person, asked, options)
+      Identification.new(person: person, result: Identity.compare(
+        asked: asked, returned: person.identity, corrected: person.identity_corrected?, **options
+      ))
+    end
 
     # An empty answer with a handle is pending unless the source said it is settled; only a
     # settled empty answer is no_coverage.

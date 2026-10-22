@@ -8,15 +8,18 @@ module EdiGem
     # Payer-specific identifier choices are expressed by what the caller puts on the Provider,
     # not by branches here.
     class Transaction270
+      include People
+
       VERSION = "005010X279A1"
       HIERARCHY = "0022"
       INQUIRY = "13"
 
-      # HL03 level codes: the payer, the provider and the subscriber. The dependent level (23)
-      # is not written.
+      # HL03 level codes: the payer, the provider, the subscriber and the dependent. The
+      # dependent level is written only when the inquiry has a dependent.
       SOURCE_LEVEL = "20"
       RECEIVER_LEVEL = "21"
       SUBSCRIBER_LEVEL = "22"
+      DEPENDENT_LEVEL = "23"
 
       HAS_CHILDREN = "1"
       NO_CHILDREN = "0"
@@ -25,7 +28,11 @@ module EdiGem
       PAYER = "PR"
       PROVIDER = "1P"
       SUBSCRIBER = "IL"
+      DEPENDENT = "03"
       PERSON = "1"
+
+      # INS01 N: the dependent is not the insured.
+      NOT_INSURED = "N"
       ORGANISATION = "2"
 
       # NM108 identifier qualifiers. PI is a payer identification number, XX an NPI, MI a
@@ -58,7 +65,7 @@ module EdiGem
       end
 
       def segments
-        [*header, *source, *receiver, *subscriber].then { |body| body + [trailer(body)] }
+        [*header, *source, *receiver, *subscriber, *dependent].then { |body| body + [trailer(body)] }
       end
 
       def to_s
@@ -86,31 +93,6 @@ module EdiGem
          *optional("REF", "TJ", provider.tax_id)]
       end
 
-      # 2000C/2100C: the subscriber and the service types asked about.
-      def subscriber
-        person = @inquiry.subscriber
-        [segment("HL", "3", "2", SUBSCRIBER_LEVEL, NO_CHILDREN),
-         segment("TRN", TRACE_ASSIGNED_HERE, @trace, originator),
-         named(person),
-         *optional("REF", "SY", person.ssn),
-         *demographics(person),
-         *plan_date,
-         segment("EQ", @inquiry.service_type_codes.join(":"))]
-      end
-
-      # X12 writes the last name first (NM103).
-      def named(person)
-        segment("NM1", SUBSCRIBER, PERSON, person.last_name.to_s, person.first_name.to_s,
-                person.middle_name.to_s, "", "", *member_id(person))
-      end
-
-      # DMG is omitted rather than sent without a birth date.
-      def demographics(person)
-        return [] if person.date_of_birth.nil?
-
-        [segment("DMG", SINGLE_DATE, person.date_of_birth, person.gender.to_s)]
-      end
-
       # Omitted when the inquiry names no date, which asks about today.
       def plan_date
         on = @inquiry.service_date
@@ -122,10 +104,6 @@ module EdiGem
       # SE01 counts every segment from ST to SE inclusive, so it is one more than the body.
       def trailer(body)
         segment("SE", (body.length + 1).to_s, @control_number)
-      end
-
-      def member_id(person)
-        person.member_id ? [MEMBER_ID, person.member_id] : []
       end
 
       def provider_name(provider)

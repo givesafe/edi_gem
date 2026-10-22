@@ -6,8 +6,8 @@
   "items": [
     {
       "payer": { "name": "Example Payer", "payorIdentification": "00001" },
-      "subscriber": { "memberId": "MOCK00001", "firstName": "Policy", "lastName": "Holder", "dateOfBirth": "19700101" },
-      "dependent": { "firstName": "Testfirst", "lastName": "Testlast", "dateOfBirth": "20100101",
+      "subscriber": { "memberId": "MOCK00001", "firstName": "Policy", "lastName": "Holder", "dateOfBirth": "19700101", "relationToSubscriberCode": "18" },
+      "dependent": { "firstName": "Testfirst", "lastName": "Testlast", "dateOfBirth": "20100101", "relationToSubscriberCode": "19",
                      "address": { "address1": "1 Example St", "city": "Example", "state": "KY", "postalCode": "40000" } },
       "confidence": { "level": "REVIEW_NEEDED", "reason": "mock" },
       "benefitsInformation": [ { "code": "1", "serviceTypeCodes": ["30"] } ]

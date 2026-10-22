@@ -1,0 +1,101 @@
+{
+  "meta": {
+    "senderId": "STEDI",
+    "submitterId": "000000000",
+    "applicationMode": "test",
+    "traceId": "01MOCKDEPENDENT0000000000",
+    "outboundTraceId": "01MOCKDEPENDENT0000000000"
+  },
+  "controlNumber": "000000001",
+  "reassociationKey": "000000001",
+  "tradingPartnerServiceId": "77027",
+  "provider": {
+    "providerName": "EXAMPLECLINIC",
+    "npi": "1999999984",
+    "entityIdentifier": "Provider",
+    "entityType": "Non-Person Entity"
+  },
+  "subscriber": {
+    "memberId": "MOCK00000002",
+    "firstName": "POLICY",
+    "lastName": "HOLDER",
+    "gender": "F",
+    "entityIdentifier": "Insured or Subscriber",
+    "entityType": "Person",
+    "dateOfBirth": "19700101",
+    "relationToSubscriber": "Self",
+    "relationToSubscriberCode": "18",
+    "insuredIndicator": "Y",
+    "groupNumber": "GRP0001",
+    "planNumber": "PLAN0001"
+  },
+  "payer": {
+    "entityIdentifier": "Payer",
+    "entityType": "Non-Person Entity",
+    "name": "MEDICAID FLORIDA",
+    "payorIdentification": "77027"
+  },
+  "planInformation": {
+    "groupNumber": "GRP0001",
+    "planNumber": "PLAN0001"
+  },
+  "planDateInformation": {
+    "eligibilityBegin": "20250101",
+    "plan": "20260101"
+  },
+  "planStatus": [
+    {
+      "statusCode": "1",
+      "status": "Active Coverage",
+      "planDetails": "MEDICAID",
+      "serviceTypeCodes": [
+        "30"
+      ]
+    }
+  ],
+  "benefitsInformation": [
+    {
+      "code": "1",
+      "name": "Active Coverage",
+      "serviceTypeCodes": [
+        "30"
+      ],
+      "serviceTypes": [
+        "Health Benefit Plan Coverage"
+      ],
+      "insuranceType": "MC",
+      "insuranceTypeCode": "MC",
+      "planCoverage": "MEDICAID MANAGED CARE",
+      "inPlanNetworkIndicatorCode": "Y",
+      "inPlanNetworkIndicator": "Yes"
+    },
+    {
+      "code": "B",
+      "name": "Co-Payment",
+      "serviceTypeCodes": [
+        "30"
+      ],
+      "benefitAmount": "0",
+      "inPlanNetworkIndicatorCode": "Y"
+    }
+  ],
+  "errors": [],
+  "eligibilitySearchId": "00000000-0000-4000-8000-000000000001",
+  "id": "ec_00000000-0000-4000-8000-000000000001",
+  "dependents": [
+    {
+      "firstName": "TESTFIRST",
+      "lastName": "TESTLAST",
+      "gender": "M",
+      "dateOfBirth": "20100101",
+      "relationToSubscriber": "Child",
+      "relationToSubscriberCode": "19",
+      "insuredIndicator": "N",
+      "maintenanceTypeCode": "001",
+      "maintenanceReasonCode": "25",
+      "entityIdentifier": "Dependent",
+      "entityType": "Person",
+      "planNumber": "PLAN0001"
+    }
+  ]
+}

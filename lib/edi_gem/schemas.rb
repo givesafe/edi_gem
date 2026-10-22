@@ -50,6 +50,51 @@ EdiGem::Schema.define(:x12_271) do
     field :code, from: "AAA03", codec: :aaa03
     field :followup, from: "AAA04"
   end
+
+  # When the patient is a dependent, their lines, dates and refusals are in loop 2000D.
+  benefit "2110D/EB" do
+    field :status, from: "EB01", codec: :eb01_status
+    field :status_code, from: "EB01", codec: :eb01_status_code
+    field :benefit_type, from: "EB01", codec: :eb01_benefit
+    field :service_types, from: "EB03", codec: :codes
+    field :insurance_type, from: "EB04"
+    field :plan_name, from: "EB05"
+    field :in_network, from: "EB12", codec: :yes_no
+  end
+
+  benefit "2100D/DTP[356]" do
+    field :begins_on, from: "DTP03"
+  end
+
+  benefit "2100D/DTP[357]" do
+    field :ends_on, from: "DTP03"
+  end
+
+  rejection "2100D/AAA", level: :dependent do
+    field :code, from: "AAA03", codec: :aaa03
+    field :followup, from: "AAA04"
+  end
+
+  # The people the 271 names: NM1 (IL the subscriber, 03 a dependent), DMG and INS at each
+  # level. INS02 is the relationship, INS03 and INS04 the maintenance codes.
+  { "C" => [:subscriber, "IL"], "D" => [:dependent, "03"] }.each do |level, (role, entity)|
+    person "2100#{level}/NM1[#{entity}]", role: role do
+      field :last_name, from: "NM103"
+      field :first_name, from: "NM104"
+      field :middle_name, from: "NM105"
+      field :member_id, from: "NM109"
+    end
+
+    person "2100#{level}/DMG[D8]", role: role do
+      field :date_of_birth, from: "DMG02"
+    end
+
+    person "2100#{level}/INS", role: role do
+      field :relationship_code, from: "INS02"
+      field :maintenance_type_code, from: "INS03"
+      field :maintenance_reason_code, from: "INS04"
+    end
+  end
 end
 
 EdiGem::Schema.define(:stedi) do
@@ -125,6 +170,28 @@ EdiGem::Schema.define(:stedi) do
     field :resolution, from: "possibleResolutions"
   end
 
+  rejection "dependents[].aaaErrors[]", level: :dependent do
+    field :code, from: "code", codec: :aaa03
+    field :description, from: "description"
+    field :followup, from: "followupAction"
+    field :resolution, from: "possibleResolutions"
+  end
+
+  # The subscriber is always the policyholder (18). A dependent's memberId is never sent; theirs
+  # is the subscriber's.
+  { "subscriber" => :subscriber, "dependents[]" => :dependent }.each do |address, role|
+    person address, role: role do
+      field :first_name, from: "firstName"
+      field :last_name, from: "lastName"
+      field :middle_name, from: "middleName"
+      field :date_of_birth, from: "dateOfBirth"
+      field :member_id, from: "memberId"
+      field :relationship_code, from: "relationToSubscriberCode"
+      field :maintenance_type_code, from: "maintenanceTypeCode"
+      field :maintenance_reason_code, from: "maintenanceReasonCode"
+    end
+  end
+
   # applicationMode is the vendor's label for the exchange, not proof of whether a real payer
   # was reached.
   detail do
@@ -180,7 +247,11 @@ EdiGem::Schema.define(:stedi_discovery) do
     %w[subscriber dependent].reverse_each do |person|
       field :matched_first_name, from: "#{person}.firstName"
       field :matched_last_name, from: "#{person}.lastName"
+      field :matched_middle_name, from: "#{person}.middleName"
       field :matched_date_of_birth, from: "#{person}.dateOfBirth"
+      field :matched_relationship_code, from: "#{person}.relationToSubscriberCode"
+      field :matched_maintenance_type_code, from: "#{person}.maintenanceTypeCode"
+      field :matched_maintenance_reason_code, from: "#{person}.maintenanceReasonCode"
       field :matched_address_line1, from: "#{person}.address.address1"
       field :matched_address_line2, from: "#{person}.address.address2"
       field :matched_city, from: "#{person}.address.city"

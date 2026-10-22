@@ -20,7 +20,9 @@ module EdiGem
                      service_types insurance_type in_network begins_on ends_on coverage_ends_on
                      line_begins_on line_ends_on
                      share_of_cost confidence confidence_reason
-                     matched_first_name matched_last_name matched_date_of_birth
+                     matched_first_name matched_last_name matched_middle_name
+                     matched_date_of_birth matched_relationship_code
+                     matched_maintenance_type_code matched_maintenance_reason_code
                      matched_address_line1 matched_address_line2 matched_city matched_state
                      matched_postal_code].freeze
 

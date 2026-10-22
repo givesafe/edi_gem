@@ -42,7 +42,7 @@ module EdiGem
       def read_batch(body)
         split_transactions(body).map do |document|
           reading = Reading.new(document: document, schema: Schema.fetch(SCHEMA))
-          Response.new(benefits: reading.benefits, rejections: reading.rejections,
+          Response.new(benefits: reading.benefits, rejections: reading.rejections, people: reading.people,
                        details: reading.details, settled: true)
         end
       end

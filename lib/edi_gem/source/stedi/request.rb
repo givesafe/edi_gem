@@ -18,13 +18,15 @@ module EdiGem
         end
 
         # dateOfService is sent only when the inquiry names a date; omitting it asks about today.
+        # A dependent goes in `dependents`, one per check.
         def eligibility
           encounter = { serviceTypeCodes: @inquiry.service_type_codes }
           encounter[:dateOfService] = @inquiry.service_date if @inquiry.as_of
-          { tradingPartnerServiceId: @payer_code,
-            provider: @inquiry.provider.to_h,
-            subscriber: @inquiry.subscriber.to_h,
-            encounter: encounter }.merge(credentials)
+          body = { tradingPartnerServiceId: @payer_code,
+                   provider: @inquiry.provider.to_h,
+                   subscriber: @inquiry.subscriber.to_h }
+          body[:dependents] = [@inquiry.dependent.to_dependent_h] if @inquiry.dependent?
+          body.merge(encounter: encounter).merge(credentials)
         end
 
         # One batch item: the eligibility body plus the identifier its answer comes back under.

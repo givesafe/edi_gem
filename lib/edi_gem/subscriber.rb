@@ -11,7 +11,8 @@ module EdiGem
                 :gender, :ssn, :group_number, :relationship
 
     # `relationship` is the X12 subscriber relationship; :self means the patient is the
-    # subscriber.
+    # subscriber. A dependent's is :spouse, :child, :other_adult, or nil when not known (it is
+    # then not sent).
     def initialize(member_id: nil, first_name: nil, last_name: nil, middle_name: nil,
                    date_of_birth: nil, gender: nil, ssn: nil, group_number: nil,
                    relationship: :self)
@@ -26,7 +27,12 @@ module EdiGem
       @relationship = relationship
     end
 
-    RELATIONSHIP_CODES = { self: "18", spouse: "01", child: "19", other: "G8" }.freeze
+    RELATIONSHIP_CODES = { self: "18", spouse: "01", child: "19", other: "G8",
+                           other_adult: "34" }.freeze
+
+    # The relationships a 270 can name for a dependent (2100D INS02, Stedi's
+    # individualRelationshipCode).
+    DEPENDENT_RELATIONSHIPS = %i[spouse child other_adult].freeze
 
     # The fields a source's search_options are written in terms of.
     SEARCHABLE = %i[member_id first_name last_name middle_name date_of_birth gender ssn
@@ -37,10 +43,23 @@ module EdiGem
       SEARCHABLE.select { |field| public_send(field) }
     end
 
+    # Names go as Identity.plain spells them: payers differ on accents, so none are sent.
     def to_h
-      { memberId: @member_id, firstName: @first_name, lastName: @last_name,
-        dateOfBirth: @date_of_birth, gender: @gender, ssn: @ssn,
-        groupNumber: @group_number }.compact
+      { memberId: @member_id, firstName: Identity.plain(@first_name),
+        lastName: Identity.plain(@last_name), dateOfBirth: @date_of_birth, gender: @gender,
+        ssn: @ssn, groupNumber: @group_number }.compact
+    end
+
+    # The X12 code for a dependent's relationship, or nil when it is not one a 270 can name.
+    def dependent_relationship_code
+      RELATIONSHIP_CODES[@relationship] if DEPENDENT_RELATIONSHIPS.include?(@relationship)
+    end
+
+    # As Stedi takes a dependent: no member id (theirs is the subscriber's), and the relationship
+    # when known.
+    def to_dependent_h
+      to_h.except(:memberId, :groupNumber)
+          .merge(individualRelationshipCode: dependent_relationship_code).compact
     end
 
     # Names and identifiers are PHI, so only which fields are set is printed.

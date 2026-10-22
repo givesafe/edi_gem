@@ -26,6 +26,14 @@ module EdiGem
                        .reject { |rejection| found.any? { |kept| kept.same_refusal_as?(rejection) } }
     end
 
+    # One Person per role and position: an X12 person is spread over NM1, DMG and INS at one
+    # level, so the fragments one role finds at one position are one person. Subscriber first.
+    def people
+      person_fragments.group_by(&:first)
+                      .filter_map { |(role, _), fragments| person(role, fragments.map(&:last)) }
+                      .sort_by { |found| found.dependent? ? 1 : 0 }
+    end
+
     def details
       @schema.details.each_with_object({}) do |mapping, found|
         @document.records(mapping.address)
@@ -34,6 +42,18 @@ module EdiGem
     end
 
     private
+
+    def person_fragments
+      @schema.people.flat_map do |mapping|
+        placed(mapping).map { |at, attributes| [[mapping.level, at], attributes] }
+      end
+    end
+
+    # The earlier fragment wins a field two carry. nil when none held a field.
+    def person(role, fragments)
+      attributes = fragments.reduce({}) { |all, one| one.merge(all) }
+      Person.new(role: role, **attributes) unless attributes.empty?
+    end
 
     def placed(mapping)
       @document.locate(mapping.address).map { |at, record| [at, attributes(mapping, record)] }
