@@ -30,4 +30,10 @@ RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
+
+  # A partial double stubs only methods the real object has, with arguments it accepts (RSpec's
+  # docs: "You should set this unless you have a good reason not to").
+  config.mock_with :rspec do |mocks|
+    mocks.verify_partial_doubles = true
+  end
 end
