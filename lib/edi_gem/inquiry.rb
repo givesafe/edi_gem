@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "date"
-
 module EdiGem
   # The question sent to a source: an eligibility check at a known payer, or an insurance
   # discovery that looks for coverage without one.
@@ -37,10 +35,7 @@ module EdiGem
 
       # The date asked about, as X12's YYYYMMDD, or nil when none was given.
       def service_date(default: nil)
-        date = @as_of || default
-        return nil if date.nil?
-
-        date.respond_to?(:strftime) ? date.strftime("%Y%m%d") : date.to_s
+        Codec.yyyymmdd(@as_of || default)
       end
 
       def dependent? = !@dependent.nil?
@@ -54,13 +49,22 @@ module EdiGem
         search_options.any? { |option| option.all? { |field| searched(field) } }
       end
 
+      # Stedi's Idempotency-Key for this inquiry on the caller's day `on` (see RequestKey). `routing`
+      # is what the kind of inquiry needs to say what it asks (a check's clearinghouse).
+      def idempotency_key(secret:, on:, **routing)
+        RequestKey.idempotency_key(self.class::OPERATION, asked_on_a_day(**routing), secret: secret, on: on)
+      end
+
+      # What this inquiry asks, on any day (see RequestKey).
+      def fingerprint(secret:, **routing) = RequestKey.fingerprint(asked(**routing), secret: secret)
+
       private
 
+      # What a day's key is made from: what the inquiry asks, unless a kind adds to it.
+      def asked_on_a_day(**routing) = asked(**routing)
+
       # The patient's birth date as a Date, so a key made from it matches one made from a Date.
-      def birth_date
-        date = patient.date_of_birth
-        date && Date.strptime(date, "%Y%m%d")
-      end
+      def birth_date = Codec.day(patient.date_of_birth)
 
       def searched(field)
         return @subscriber.public_send(field) if @dependent.nil? || field == :member_id
@@ -78,6 +82,8 @@ module EdiGem
     # those the source already knows it needs. `credential` holds this payer's secrets for this
     # inquiry, and is used in place of the source's own: each payer issues its own.
     class Eligibility < Base
+      OPERATION = :eligibility
+
       attr_reader :payer_code, :payer_name, :required_credentials, :credential
 
       def initialize(payer_code:, payer_name: nil, required_credentials: [], credential: nil, **base)
@@ -88,26 +94,18 @@ module EdiGem
         @credential = credential
       end
 
-      # Stedi's Idempotency-Key for this check on the caller's day `on` (see RequestKey).
-      # `clearinghouse` names the source it is sent through, since the payer code is that source's.
-      # Asked as the subscriber or as a dependent, the two are different questions.
-      def idempotency_key(secret:, on:, clearinghouse:)
-        RequestKey.idempotency_key(:eligibility, asked(clearinghouse).merge(asked_as: asked_as),
-                                   secret: secret, on: on)
-      end
-
-      # What this check asks, on any day and asked either way (see RequestKey).
-      def fingerprint(secret:, clearinghouse:)
-        RequestKey.fingerprint(asked(clearinghouse), secret: secret)
-      end
-
       def asked_as = dependent? ? :dependent : :subscriber
 
       private
 
+      # A check's keys take `clearinghouse:`, the source it is sent through, since the payer code
+      # is that source's. Its fingerprint is the same asked either way; a day's key is not: asked
+      # as the subscriber or as a dependent, the two are different questions.
+      def asked_on_a_day(clearinghouse:) = asked(clearinghouse: clearinghouse).merge(asked_as: asked_as)
+
       # The patient's names as the payer is sent them, so any spelling sent the same way is the
       # same question; the member id is the subscriber's.
-      def asked(clearinghouse)
+      def asked(clearinghouse:)
         { first_name: Identity.plain(patient.first_name), last_name: Identity.plain(patient.last_name),
           date_of_birth: birth_date, insurance_id: @subscriber.member_id, payer_id: @payer_code,
           payer_type: clearinghouse }
@@ -119,6 +117,8 @@ module EdiGem
     # `as_of` is required. A discovery must carry a service date, and the gem does not pick
     # "today" because that depends on the caller's time zone.
     class Discovery < Base
+      OPERATION = :discovery
+
       def initialize(as_of:, **base)
         raise ArgumentError, "as_of is required on a discovery: name the date to ask about" if
           as_of.nil?
@@ -136,17 +136,7 @@ module EdiGem
         Question.new(person: Person::Asked.new(first_name: @subscriber.first_name, last_name: @subscriber.last_name,
                                                date_of_birth: birth_date, address: @subscriber.address,
                                                ssn: @subscriber.ssn),
-                     as_of: Date.strptime(service_date, "%Y%m%d"))
-      end
-
-      # Stedi's Idempotency-Key for this discovery on the caller's day `on` (see RequestKey).
-      def idempotency_key(secret:, on:)
-        RequestKey.idempotency_key(:discovery, asked, secret: secret, on: on)
-      end
-
-      # What this discovery asks, on any day (see RequestKey).
-      def fingerprint(secret:)
-        RequestKey.fingerprint(asked, secret: secret)
+                     as_of: Codec.day(service_date))
       end
 
       private

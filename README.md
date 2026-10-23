@@ -387,7 +387,11 @@ finding = response.coverage_on(Date.new(2026, 10, 22))
 finding.status   # => :active
 finding.code     # => "1"
 finding.active?  # => true
+EdiGem::Coverage.context("7")  # => "inactive, the payer is updating eligibility"
 ```
+
+`Coverage.context(code)` says what an EB01 code adds beyond its status (5, 7 and 8, the X12
+pending codes), or nil. It takes a stored code as well as a finding's.
 
 | field | type | values and presence |
 |---|---|---|

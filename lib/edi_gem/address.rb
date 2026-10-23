@@ -13,7 +13,7 @@ module EdiGem
 
     # nil when no field holds a value, so an address is never an empty one.
     def self.from(**fields)
-      new(**fields) unless fields.values_at(*FIELDS).all? { |value| value.nil? || value.to_s.empty? }
+      new(**fields) unless fields.values_at(*FIELDS).all? { |value| EdiGem.blank?(value) }
     end
 
     # One as Stedi sends it (address1, address2, city, state, postalCode), or nil.

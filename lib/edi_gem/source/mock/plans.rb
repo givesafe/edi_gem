@@ -15,9 +15,9 @@ module EdiGem
                              inactive_update: "7", inactive_investigation: "8" }.freeze
 
         # Scenarios whose plans differ from that in some other way, and the method that finds them.
-        SHAPED = { unverified: :unverified, spelled: :spelled, other_person: :other_person,
-                   other_payer: :other_payer, dependent: :dependent, mixed: :mixed, ended: :ended,
-                   not_started: :not_started, dental: :dental, medicaid_mco: :medicaid_mco }.freeze
+        # Each is the name of the method below that finds them.
+        SHAPED = %i[unverified spelled other_person other_payer dependent mixed ended not_started dental
+                    medicaid_mco].freeze
 
         OTHER_PAYER = "MOCKOTHER"
         MEDICAID_PAYER = "MOCKMEDICAID"
@@ -51,9 +51,9 @@ module EdiGem
         def for(scenario)
           code = EB01_BY_SCENARIO[scenario]
           return each_payer(@person, code) if code
-          return [] unless SHAPED.key?(scenario)
+          return [] unless SHAPED.include?(scenario)
 
-          send(SHAPED.fetch(scenario))
+          send(scenario)
         end
 
         private
@@ -102,8 +102,8 @@ module EdiGem
 
         def dated(begins, ends)
           each_payer(@person, "1").each do |found|
-            found["planDateInformation"] = { "planBegin" => begins.strftime("%Y%m%d"),
-                                             "planEnd" => ends.strftime("%Y%m%d") }
+            found["planDateInformation"] = { "planBegin" => Codec.yyyymmdd(begins),
+                                             "planEnd" => Codec.yyyymmdd(ends) }
           end
         end
 

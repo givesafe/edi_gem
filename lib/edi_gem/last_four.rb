@@ -17,7 +17,7 @@ module EdiGem
     def self.of(ssn)
       return ssn if ssn.is_a?(self)
 
-      new(ssn) unless ssn.to_s.strip.empty?
+      new(ssn) unless EdiGem.blank?(ssn)
     end
 
     def initialize(ssn)

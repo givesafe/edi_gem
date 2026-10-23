@@ -15,10 +15,6 @@ module EdiGem
     include Concealed
     include AnsweredPlan
 
-    # The plan's status on a day, as Coverage reads it, that a caller acts on. Anything else is
-    # :unknown: not knowing is not a denial.
-    STATUSES = AnsweredPlan::STATUSES
-
     # The medical plans among a discovery's found plans. A Medicaid plan another plan names as its
     # primary payer goes with that plan, and is not a plan of its own.
     def self.all(found_plans, directory: nil, asked: nil)
@@ -38,9 +34,6 @@ module EdiGem
       @asked = asked
     end
 
-    def payer_code = @found_plan.payer_code
-    def member_id = @found_plan.member_id
-
     # The clearinghouse's payer ID for the plan's payer. Network I/O: the first time a source is
     # asked about a payer code, it searches its payer directory (a request, not billed), and it
     # remembers the answer for its lifetime, so plans with one payer code ask once between them.
@@ -53,19 +46,12 @@ module EdiGem
     # The clearinghouse whose payer IDs payer_id is one of (:stedi), or nil with no directory.
     def clearinghouse = @directory&.directory_name
 
-    # The plan's own fields: the first of its own lines that holds each. The Medicaid plan's
-    # lines name none of them.
-    def plan_name = self[:plan_name]
-    def plan_number = self[:plan_number]
-    def group_number = self[:group_number]
-
-    # A field of the plan itself (plan_name, plan_number, ...), as FoundPlan#[] reads it.
+    # A field of the plan itself (plan_name, plan_number, ...), as FoundPlan#[] reads it: the
+    # first of its own lines that holds it. The Medicaid plan's lines name none of the plan's own.
     def [](field) = @found_plan[field]
 
     # The state Medicaid ID: the one on the plan's own lines wins over the Medicaid plan's member ID.
-    def medicaid_id
-      @found_plan[:state_insurance_id] || @medicaid_plan&.member_id
-    end
+    def medicaid_id = super || @medicaid_plan&.member_id
 
     # The plan's lines, then the Medicaid plan's.
     def benefits

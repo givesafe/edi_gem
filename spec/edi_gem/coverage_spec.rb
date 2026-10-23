@@ -130,4 +130,16 @@ RSpec.describe EdiGem::Coverage do
 
     expect(response.coverage_on(day)).to be_active
   end
+
+  describe ".context" do
+    it "says what a pending code adds to its status" do
+      expect(%w[5 7 8].map { |code| described_class.context(code) })
+        .to eq(["active, the payer is investigating", "inactive, the payer is updating eligibility",
+                "inactive, the payer is investigating"])
+    end
+
+    it "is nil for a code that says only its status, and for none" do
+      expect([described_class.context("1"), described_class.context(nil)]).to eq([nil, nil])
+    end
+  end
 end

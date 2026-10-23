@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "date"
-
 module EdiGem
   # What a payer said about one person's plan, in the clearinghouse's coverage terms. A check's
   # answer (CheckedPlan) and each medical plan a discovery found (MedicalPlan) both play this
@@ -32,7 +30,8 @@ module EdiGem
   # the status: nil when the plan's dates or an implied term decided.
   #
   # A host provides `benefits`, `[]` (a field of the plan as a whole) and `coverage_on(date)` (a
-  # Coverage::Finding); the role gives it `lines`, `status_on` and the plan's dates. A MedicalPlan
+  # Coverage::Finding); the role gives it `lines`, `status_on`, the plan's dates and the fields
+  # above read through `[]`, which a host overrides where it reads one elsewhere. A MedicalPlan
   # also answers payer_id, which asks the source's payer directory over the network (see
   # MedicalPlan#payer_id).
   module AnsweredPlan
@@ -61,16 +60,17 @@ module EdiGem
       STATUSES.include?(status) ? status : :unknown
     end
 
-    def plan_begins_on = plan_day(self[:plan_begins_on])
-    def plan_ends_on = plan_day(self[:plan_ends_on])
+    def plan_begins_on = Codec.day(self[:plan_begins_on])
+    def plan_ends_on = Codec.day(self[:plan_ends_on])
 
-    private
-
-    # A YYYYMMDD string that names a real day, as a Date; anything else (a number included) is nil.
-    def plan_day(value)
-      Date.strptime(value, "%Y%m%d") if value.is_a?(String) && value.match?(Codec::DAY)
-    rescue Date::Error
-      nil
-    end
+    # The plan's fields as the plan as a whole holds them (`[]`). A host overrides the ones it
+    # reads elsewhere: a check's plan is named by its first active line, and a discovery's
+    # Medicaid ID may come from the Medicaid plan beside it.
+    def payer_code = self[:payer_code]
+    def member_id = self[:member_id]
+    def medicaid_id = self[:state_insurance_id]
+    def plan_name = self[:plan_name]
+    def plan_number = self[:plan_number]
+    def group_number = self[:group_number]
   end
 end

@@ -70,33 +70,32 @@ module EdiGem
         @endpoint ||= URI.parse("https://#{bucket}.s3.#{@region}.amazonaws.com")
       end
 
+      # Raises on any non-success answer rather than reporting a write that did not happen.
       def put(path, body)
-        uri = URI.join(endpoint, "/#{path}")
-        request = Net::HTTP::Put.new(uri)
+        request = signed(Net::HTTP::Put, path, body: body, headers: { "content-type" => "application/json" })
         request.body = body
-        @signature.headers_for(method: :put, uri: uri, body: body,
-                               headers: { "content-type" => "application/json" })
-                  .each { |name, value| request[name] = value }
-        answer(reach(request, path), path)
+        succeeded(reach(request, path), path)
+        location(path)
       end
 
       def fetch(uri)
-        path = uri.to_s.delete_prefix("s3://#{bucket}/")
+        path = uri.to_s.delete_prefix(location(""))
         # A uri this archive did not make is stored data, not a defect in the call: asking again
         # reads the same uri, so it is not retryable.
         raise ArchiveFailed, "#{uri} is not in s3://#{bucket}" if path == uri.to_s
 
-        response = reach(signed_get(path), path)
-        return response.body if response.is_a?(Net::HTTPSuccess)
-
-        refused(response, path)
+        succeeded(reach(signed(Net::HTTP::Get, path), path), path).body
       end
 
       private
 
-      def signed_get(path)
-        request = Net::HTTP::Get.new(URI.join(endpoint, "/#{path}"))
-        @signature.headers_for(method: :get, uri: request.uri, body: "")
+      # Where this archive keeps `path`, as the uri it gives back.
+      def location(path) = "s3://#{bucket}/#{path}"
+
+      # A request of `verb` (a Net::HTTP request class) for `path`, signed for `body`.
+      def signed(verb, path, body: "", headers: {})
+        request = verb.new(URI.join(endpoint, "/#{path}"))
+        @signature.headers_for(method: verb::METHOD.downcase.to_sym, uri: request.uri, body: body, headers: headers)
                   .each { |name, value| request[name] = value }
         request
       end
@@ -111,16 +110,18 @@ module EdiGem
       def reach(request, path)
         client.request(request)
       rescue *NETWORK_ERRORS => error
-        raise ArchiveFailed.new("s3://#{bucket}/#{path} could not be reached (#{error.class})",
-                                retryable: true)
+        raise ArchiveFailed.new("#{location(path)} could not be reached (#{error.class})", retryable: true)
       rescue *PROTOCOL_ERRORS => error
-        raise ArchiveFailed.new("s3://#{bucket}/#{path} answered with no readable HTTP (#{error.class})",
+        raise ArchiveFailed.new("#{location(path)} answered with no readable HTTP (#{error.class})",
                                 retryable: false)
       end
 
-      # A non-success answer, retryable when its status is in RETRYABLE_STATUSES.
-      def refused(response, path)
-        raise ArchiveFailed.new("s3://#{bucket}/#{path} answered #{response.code}",
+      # The response when it is a success; a non-success answer raises, retryable when its status is
+      # in RETRYABLE_STATUSES.
+      def succeeded(response, path)
+        return response if response.is_a?(Net::HTTPSuccess)
+
+        raise ArchiveFailed.new("#{location(path)} answered #{response.code}",
                                 retryable: RETRYABLE_STATUSES.include?(response.code.to_s))
       end
 
@@ -128,13 +129,6 @@ module EdiGem
       def ensure_addressable
         raise ArgumentError, "a bucket name with a dot cannot be reached over TLS" if
           bucket.to_s.include?(".")
-      end
-
-      # Raises on any non-success answer rather than reporting a write that did not happen.
-      def answer(response, path)
-        return "s3://#{bucket}/#{path}" if response.is_a?(Net::HTTPSuccess)
-
-        refused(response, path)
       end
 
       def client

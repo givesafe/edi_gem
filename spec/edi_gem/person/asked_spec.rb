@@ -33,24 +33,6 @@ RSpec.describe EdiGem::Person::Asked do
       .to eq([true, true, true, false])
   end
 
-  describe "#same_as?" do
-    it "is true for two spellings of one name" do
-      expect(person.same_as?(person.with(first_name: "jose", last_name: "Nunez"))).to be true
-    end
-
-    it "is false for another name a letter apart" do
-      expect(person.with(first_name: "Leon").same_as?(person.with(first_name: "Leo"))).to be false
-    end
-
-    it "is false for a name cut short, which only a payer does" do
-      expect(person.with(first_name: "Maximiliano").same_as?(person.with(first_name: "Maximili"))).to be false
-    end
-
-    it "is false for another birth date" do
-      expect(person.same_as?(person.with(date_of_birth: Date.new(1980, 1, 3)))).to be false
-    end
-  end
-
   it "is sent as the subscriber on an ID, birth date as YYYYMMDD" do
     expect(person.subscriber(member_id: "MOCKID0001"))
       .to have_attributes(member_id: "MOCKID0001", first_name: "José", date_of_birth: "19800102", relationship: :self)
@@ -78,8 +60,8 @@ RSpec.describe EdiGem::Person::Asked do
                          **fields)
     end
 
-    it "keeps the core apart: to_h, complete? and same_as? read only the names and birth date" do
-      expect([given.to_h, given.complete?, given.same_as?(person)]).to eq([person.to_h, true, true])
+    it "keeps the core apart: to_h and complete? read only the names and birth date" do
+      expect([given.to_h, given.complete?]).to eq([person.to_h, true])
     end
 
     it "equals one asked before either could be given WHEN it carries neither" do

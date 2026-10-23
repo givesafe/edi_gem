@@ -47,7 +47,7 @@ module EdiGem
       return of_state if coverages.empty?
       return :active if coverages.any?(&:active?)
 
-      coverages.any? { |coverage| coverage.status == :inactive } ? :inactive : :unanswered
+      coverages.any?(&:inactive?) ? :inactive : :unanswered
     end
 
     private

@@ -16,29 +16,28 @@ module EdiGem
         # UnreadableBody when the body holds no subscriber, or no day of service as such a string,
         # since it is then not a discovery request.
         def self.question(body)
-          subscriber = body["subscriber"] if body.is_a?(Hash)
-          encounter = body["encounter"] if subscriber.is_a?(Hash)
-          on = encounter["beginningDateOfService"] if encounter.is_a?(Hash)
-          raise UnreadableBody, "the body is not a discovery request" unless on.is_a?(String) && on.match?(Codec::DAY)
+          subscriber = within(body, "subscriber")
+          on = within(body, "encounter", "beginningDateOfService")
+          unless subscriber.is_a?(Hash) && on.is_a?(String) && on.match?(Codec::DAY)
+            raise UnreadableBody, "the body is not a discovery request"
+          end
 
-          Inquiry::Question.new(person: asked_person(subscriber), as_of: Date.strptime(on, "%Y%m%d"))
-        rescue Date::Error
-          raise UnreadableBody, "the body's day of service is not a date"
+          as_of = Codec.day(on) or raise UnreadableBody, "the body's day of service is not a date"
+          Inquiry::Question.new(person: asked_person(subscriber), as_of: as_of)
         end
+
+        # The value at `keys` in a parsed body, or nil when any step on the way is not a hash.
+        def self.within(body, *keys)
+          keys.reduce(body) { |value, key| value[key] if value.is_a?(Hash) }
+        end
+        private_class_method :within
 
         def self.asked_person(subscriber)
           Person::Asked.new(first_name: subscriber["firstName"], last_name: subscriber["lastName"],
-                            date_of_birth: born_on(subscriber["dateOfBirth"]),
+                            date_of_birth: Codec.day(subscriber["dateOfBirth"]),
                             address: Address.from_stedi(subscriber["address"]), ssn: subscriber["ssn"])
         end
         private_class_method :asked_person
-
-        def self.born_on(day)
-          Date.strptime(day, "%Y%m%d") if day.is_a?(String) && day.match?(Codec::DAY)
-        rescue Date::Error
-          nil
-        end
-        private_class_method :born_on
 
         # `policy` says what the payer needs through Stedi; the inquiry may name more.
         def initialize(inquiry, policy:, payer_code: nil, credential: nil)

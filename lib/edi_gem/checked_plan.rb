@@ -6,6 +6,7 @@ module EdiGem
   # asked about (Response#identify), and decides the relationship.
   class CheckedPlan
     include Concealed
+    include PlanFields
     include AnsweredPlan
 
     # The part of the answer the person came back in, as the relationship it means.
@@ -19,20 +20,6 @@ module EdiGem
     end
 
     def benefits = @response.benefits
-
-    # A field of the plan as a whole: the first of its benefits that holds it.
-    def [](field)
-      benefits.each do |benefit|
-        value = benefit[field]
-        return value unless value.nil?
-      end
-      nil
-    end
-
-    def payer_code = self[:payer_code]
-    def member_id = self[:member_id]
-    def medicaid_id = self[:state_insurance_id]
-    def group_number = self[:group_number]
 
     # The plan is named by its first active line. A plan active by an implied term has no active
     # line, so its first benefit names it. nil when that one names none.

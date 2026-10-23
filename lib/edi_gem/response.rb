@@ -27,9 +27,6 @@ module EdiGem
     attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored,
                 :people, :found_plans
 
-    # Who the payer answered about (see EdiGem::Identification).
-    Identification = EdiGem::Identification
-
     # One field for each part of an answer, so it runs one line past the length rule.
     def initialize(benefits: [], rejections: [], payload: nil, exchanges: [], handle: nil, # rubocop:disable Metrics/MethodLength
                    state: nil, details: {}, settled: false, stored: nil, people: [], found_plans: [],
@@ -98,13 +95,17 @@ module EdiGem
     # check names no date of service, so the payer answers about the day it was asked. An answer
     # about someone else (`identification` mismatched) is unanswered, never their coverage; with
     # no identification, only the payer's refusal can say so.
-    def verdict(on:, identification: identify({}))
-      identification.mismatched? ? :unanswered : reading.of_plan(coverage_on(on))
+    def verdict(on:, identification: nobody_compared)
+      coverage = coverage_about(on, identification)
+      coverage ? reading.of_plan(coverage) : :unanswered
     end
 
     # The status code of the benefit line that decided #verdict (Coverage::Finding#code), to record
     # beside it; nil when no line decided it: an unanswered state, or an answer about someone else.
-    def verdict_code(on:, identification:) = (reading.code_of(coverage_on(on)) unless identification.mismatched?)
+    def verdict_code(on:, identification:)
+      coverage = coverage_about(on, identification)
+      reading.code_of(coverage) if coverage
+    end
 
     # A discovery's verdict among its medical plans, each read on the day: a plan that came back
     # decides, whatever refusals came with it.
@@ -137,9 +138,15 @@ module EdiGem
 
     # A check's answer as the plan it is about (CheckedPlan), for the person `identification`
     # names (see #verdict).
-    def checked_plan(identification: identify({})) = CheckedPlan.new(self, identification: identification)
+    def checked_plan(identification: nobody_compared) = CheckedPlan.new(self, identification: identification)
 
     private
+
+    # Who the answer is about when nobody was asked: only the payer's refusal can say anything.
+    def nobody_compared = identify({})
+
+    # The plan's coverage on the day, or nil when the answer is about someone else.
+    def coverage_about(on, identification) = (coverage_on(on) unless identification.mismatched?)
 
     # The Verdict for this answer's state and refusals.
     def reading = Verdict.new(state, provider_refused: provider_refusals.any?)

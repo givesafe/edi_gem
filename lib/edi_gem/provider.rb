@@ -30,14 +30,10 @@ module EdiGem
 
     # Every source requires a provider name, so a nameless provider is refused at construction.
     def ensure_named(organization_name, last_name)
-      return unless blank?(organization_name) && blank?(last_name)
+      return unless EdiGem.blank?(organization_name) && EdiGem.blank?(last_name)
 
       raise ArgumentError, "a provider needs a name: organization_name, or last_name for an " \
                            "individual. NM103 carries it and no source accepts a request without it"
-    end
-
-    def blank?(value)
-      value.nil? || value.to_s.strip.empty?
     end
   end
 end

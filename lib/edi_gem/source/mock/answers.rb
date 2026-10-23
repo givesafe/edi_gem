@@ -35,10 +35,7 @@ module EdiGem
         end
 
         def valid?(body)
-          REQUIRED.all? do |path|
-            value = body.dig(*path)
-            !(value.nil? || value.empty?)
-          end
+          REQUIRED.none? { |path| EdiGem.blank?(body.dig(*path)) }
         end
 
         # A discovery's answer: pending, ERROR, or COMPLETE with what the scenario finds.

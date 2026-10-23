@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe EdiGem::Response::Identification do
+RSpec.describe EdiGem::Identification do
   let(:asked) { { first_name: "José", last_name: "Núñez", date_of_birth: Date.new(1980, 1, 1) } }
 
   def person(role = :subscriber, first_name: "JOSE", last_name: "NUNEZ", date_of_birth: "19800101")

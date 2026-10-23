@@ -13,7 +13,6 @@ module EdiGem
       include Concealed
 
       FIELDS = %i[first_name last_name date_of_birth].freeze
-      BLANK = /\A[[:space:]]*\z/
 
       attr_reader(*FIELDS, :address)
 
@@ -43,7 +42,7 @@ module EdiGem
 
       # A person missing a name or birth date can't be asked about.
       def complete?
-        to_h.values.none? { |value| value.nil? || value.to_s.match?(BLANK) }
+        to_h.values.none? { |value| EdiGem.blank?(value) }
       end
 
       # The names as they are sent to a payer, so any spelling sent the same way is the same person.
@@ -51,18 +50,11 @@ module EdiGem
         with(first_name: Identity.plain(@first_name), last_name: Identity.plain(@last_name))
       end
 
-      # Two people we hold are one person when their names match loosely (José and Jose,
-      # Garcia-Lopez and Garcia Lopez) and the birth date exactly. A payer's name cut short is not
-      # compared here.
-      def same_as?(other)
-        Identity.compare(asked: to_h, returned: other.to_h, truncated: false).matched?
-      end
-
       # As the payer is sent them, on `member_id`. `relationship` is nil for a dependent whose
       # relationship is not known.
       def subscriber(member_id:, relationship: :self)
         Subscriber.new(member_id: member_id, first_name: @first_name, last_name: @last_name,
-                       date_of_birth: @date_of_birth&.strftime("%Y%m%d"), relationship: relationship)
+                       date_of_birth: Codec.yyyymmdd(@date_of_birth), relationship: relationship)
       end
 
       # How each detail given beside the core compares with `person`, the one the payer holds

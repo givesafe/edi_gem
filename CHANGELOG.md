@@ -19,10 +19,10 @@ The caller contract for each is in the README's "V1 reference".
   our comparison.
 - `Identification#given_fields`, `Address#compare` and `EdiGem::LastFour`: a given address and
   the last four of an SSN are compared with what the payer holds, and never change the match.
-  `Person#ssn_last_four`, `#relationship` and `#born_on`. `Identification` is its own constant
-  (`Response::Identification` still names it).
+  `Person#ssn_last_four`, `#relationship` and `#born_on`. `Identification` is its own constant.
 - `Inquiry#idempotency_key` and `#fingerprint` (`EdiGem::RequestKey`): keys made from what a
   question asks, so the details themselves are never stored.
+- `Coverage.context(code)`: what EB01 5, 7 and 8 say beyond the status.
 - `Batch::Status#progress`, `Batch::Check#completed?`, `Error#code` and `Fault#code`.
 - `Source::Mock` (`Source.for(:mock, ...)`): Stedi with discovery answered from code, since
   Stedi's test mode answers no discovery.

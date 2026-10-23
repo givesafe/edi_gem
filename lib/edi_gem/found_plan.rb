@@ -9,22 +9,13 @@ module EdiGem
   # matched, as it holds them on record (name, birth date, address), for the caller to confirm.
   class FoundPlan
     include Concealed
+    include PlanFields
 
     attr_reader :benefits, :people
 
     def initialize(benefits:, people:)
       @benefits = benefits
       @people = people
-    end
-
-    # A field of the plan as a whole (payer_code, member_id, state_insurance_id, plan_name, ...):
-    # the first of its benefit lines that holds it.
-    def [](field)
-      @benefits.each do |benefit|
-        value = benefit[field]
-        return value unless value.nil?
-      end
-      nil
     end
 
     def payer_code = self[:payer_code]
@@ -45,7 +36,7 @@ module EdiGem
     # state Medicaid plan it manages.
     def names_as_primary_payer?(other)
       code = self[:primary_payer_code]
-      !code.to_s.strip.empty? && code == other.payer_code
+      !EdiGem.blank?(code) && code == other.payer_code
     end
 
     def subscriber_person
@@ -64,7 +55,7 @@ module EdiGem
 
     # How the person matched compares with who was asked about (Identity.compare's options).
     def identify(asked, **options)
-      Response::Identification.of(person, asked, **options)
+      Identification.of(person, asked, **options)
     end
 
     # Whether the plan covers the person on this day (Coverage's two-part test).

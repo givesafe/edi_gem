@@ -21,18 +21,30 @@ module EdiGem
     # the plan's dates or an implied term decided.
     Finding = Struct.new(:status, :code, keyword_init: true) do
       def active? = status == :active
+      def inactive? = status == :inactive
     end
+
+    # What an EB01 code says beyond its status: X12's pending investigation (5, 8) and pending
+    # eligibility update (7). A code that says only its status has none.
+    CONTEXT = {
+      "5" => "active, the payer is investigating",
+      "7" => "inactive, the payer is updating eligibility",
+      "8" => "inactive, the payer is investigating"
+    }.freeze
 
     UNDECIDED = Finding.new(status: nil, code: nil).freeze
     OUTSIDE_DATES = Finding.new(status: :inactive, code: nil).freeze
 
     module_function
 
+    # The context for an EB01 code (CONTEXT), or nil.
+    def context(code) = CONTEXT[code]
+
     # Explicit statuses first, active over inactive; then an implied term; then the payer's own
     # refusals. Lines on 30 that the day falls outside of make the plan inactive only when no line
     # within its dates decides.
     def on(benefits, date)
-      day = date.respond_to?(:strftime) ? date.strftime("%Y%m%d") : date.to_s
+      day = Codec.yyyymmdd(date).to_s
       lines = benefits.select { |benefit| benefit.line? && about_plan?(benefit) }
       current, outside = lines.partition { |benefit| within?(benefit, day) }
       decide(current) || (outside.any? ? OUTSIDE_DATES : UNDECIDED)

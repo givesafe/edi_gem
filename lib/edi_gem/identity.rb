@@ -92,7 +92,7 @@ module EdiGem
 
     # Nothing asked counts as nothing to compare, like nothing returned.
     def field(asked, returned)
-      return :not_returned if blank?(asked) || blank?(returned)
+      return :not_returned if EdiGem.blank?(asked) || EdiGem.blank?(returned)
 
       yield(asked, returned) ? :matched : :differs
     end
@@ -128,11 +128,7 @@ module EdiGem
     end
 
     def day(value)
-      return nil if blank?(value)
-
-      value.respond_to?(:strftime) ? value.strftime("%Y%m%d") : value.to_s.delete("-").strip
+      Codec.yyyymmdd(value).delete("-").strip unless EdiGem.blank?(value)
     end
-
-    def blank?(value) = value.nil? || value.to_s.strip.empty?
   end
 end

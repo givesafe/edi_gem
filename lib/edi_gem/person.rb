@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "date"
-
 module EdiGem
   # A person as the payer holds them on its answer: the subscriber (the policyholder) or a
   # dependent on the subscriber's policy.
@@ -51,11 +49,7 @@ module EdiGem
 
     # The birth date as a Date. The payer sends YYYYMMDD, and sometimes nothing or no date at all,
     # which is nil.
-    def born_on
-      Date.strptime(@date_of_birth.to_s.delete("-"), "%Y%m%d")
-    rescue Date::Error
-      nil
-    end
+    def born_on = Codec.day(@date_of_birth.to_s.delete("-"))
 
     # What Identity.compare reads.
     def identity

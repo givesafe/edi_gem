@@ -33,8 +33,16 @@ module EdiGem
 
     # How far along a batch is. Counts and a state, never coverage.
     class Status
-      # VALIDATION_FAILED is terminal: no payer was asked and nothing more will arrive.
-      FINISHED = %w[COMPLETED COMPLETED_WITH_ERRORS VALIDATION_FAILED].freeze
+      COMPLETED = "COMPLETED"
+
+      # Where a batch has got to, by Stedi's status. Any status not finished is still in progress:
+      # Stedi keeps retrying a silent payer for hours.
+      PROGRESS = { COMPLETED => :completed, "COMPLETED_WITH_ERRORS" => :completed_with_errors,
+                   "VALIDATION_FAILED" => :validation_failed }.freeze
+
+      # The statuses nothing more follows. VALIDATION_FAILED is terminal: no payer was asked and
+      # nothing more will arrive.
+      FINISHED = PROGRESS.keys.freeze
 
       FIELDS = { id: "id", name: "name", state: "status", total: "totalCount",
                  succeeded: "successCount", failed: "errorCount",
@@ -54,11 +62,6 @@ module EdiGem
         @exchange = exchange
         FIELDS.each_key { |field| instance_variable_set(:"@#{field}", fields[field]) }
       end
-
-      # Where a batch has got to, by Stedi's status. Any status not finished is still in progress:
-      # Stedi keeps retrying a silent payer for hours.
-      PROGRESS = { "COMPLETED" => :completed, "COMPLETED_WITH_ERRORS" => :completed_with_errors,
-                   "VALIDATION_FAILED" => :validation_failed }.freeze
 
       # Whether the checks are worth reading yet.
       def finished? = FINISHED.include?(@state)
@@ -117,7 +120,8 @@ module EdiGem
       include Concealed
 
       ACTIVE = "ACTIVE"
-      DONE = %w[COMPLETED COMPLETED_WITH_ERRORS VALIDATION_FAILED].freeze
+      # A check finishes in the states a batch does.
+      DONE = Status::FINISHED
 
       # Where the archive filed this item's raw answer (an Archive::Stored), when the page was
       # read with `archive:`; nil otherwise.
@@ -147,7 +151,7 @@ module EdiGem
 
       # The source finished asking without error. A completed check with no answer in it is the
       # source's doing, not the payer's.
-      def completed? = state == DONE.first
+      def completed? = state == Status::COMPLETED
 
       def active? = result == ACTIVE
 

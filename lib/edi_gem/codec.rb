@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "date"
+
 module EdiGem
   # The X12 code sets, shared by every schema: a JSON vendor's benefit "code" is an EB01 and its
   # error "code" an AAA03. A source with its own values registers its own codec.
@@ -131,6 +133,19 @@ module EdiGem
                  aaa03: REJECT_REASON, yes_no: YES_NO, codes: CODES, rd8_start: RD8_START, rd8_end: RD8_END,
                  span_begin: SPAN_BEGIN, span_end: SPAN_END,
                  primary_payer_code: PRIMARY_PAYER_CODE, primary_payer_name: PRIMARY_PAYER_NAME }.freeze
+
+    DAY_FORMAT = "%Y%m%d"
+
+    # A YYYYMMDD string that names a real day, as a Date; anything else (a number included) is nil.
+    def self.day(value)
+      Date.strptime(value, DAY_FORMAT) if value.is_a?(String) && value.match?(DAY)
+    rescue Date::Error
+      nil
+    end
+
+    # A day as X12 writes one, YYYYMMDD: a Date (anything answering strftime) formatted, anything
+    # else as its text, nil as nil.
+    def self.yyyymmdd(date) = date.respond_to?(:strftime) ? date.strftime(DAY_FORMAT) : date&.to_s
 
     # A codec is a lookup table, or a rule when the mapping is not one value to one value.
     def self.decode(name, value)

@@ -6,7 +6,6 @@ module EdiGem
       # Stedi's payer directory. A search is not a billed transaction.
       module Directory
         PAGE_SIZE = 100
-        BLANK = /\A[[:space:]]*\z/
         # Whose payer IDs payer_id_for gives: Stedi's, for the mock too, which asks Stedi's directory.
         NAME = :stedi
 
@@ -28,7 +27,7 @@ module EdiGem
         # One search per code for the source's lifetime: the answer, nil included, is remembered.
         # A failed search raises (Fault, UnreadableBody) and is not remembered.
         def payer_id_for(payer_code)
-          return if payer_code.to_s.match?(BLANK)
+          return if EdiGem.blank?(payer_code)
 
           code = payer_code.to_s
           @payer_ids ||= {}
