@@ -1,7 +1,8 @@
 ---
 # Reek reports where a heuristic matched, not what is wrong. Each finding is one of three:
 #   1. the rule contradicts a Ruby or house convention: set here once, with the convention it yields to;
-#   2. the rule fits, but one context is a deliberate exception: excluded here by name, with its reason;
+#   2. the rule fits, but one context is a deliberate exception: skipped beside the code, in the comment
+#      above its method or class, with its reason first and then `# :reek:SmellName`;
 #   3. the finding locates a design question: answered in the code, never quieted here.
 # Never quiet a finding by moving a decision away from its owner. Where reek and rubocop check one
 # rule, rubocop (.rubocop.yml) is authoritative and reek's check is off.
@@ -34,11 +35,6 @@ detectors:
   # flocking rules leave them). A public method that uses no state is still a question.
   UtilityFunction:
     public_methods_only: true
-    exclude:
-      # Ruby's pretty_print protocol, so `pp` never prints the digits.
-      - "EdiGem::LastFour#pretty_print"
-      # The mock's check of a request body against what Stedi requires.
-      - "EdiGem::Source::Mock::Answers#valid?"
 
   # An absence the domain keeps distinct: no archive, no identification, a payer missing from the
   # directory, a person the payer didn't return. A Null Object is the answer when one absence is
@@ -49,71 +45,6 @@ detectors:
   # Transforms over plans, benefits and their fields need two levels; a third is still flagged.
   NestedIterators:
     max_allowed_nesting: 2
-
-  # --- 2. Deliberate exceptions, by name ------------------------------------------------------
-
-  FeatureEnvy:
-    exclude:
-      # Local values the method built or was given to compare or reduce, not behavior another
-      # object owns.
-      - "EdiGem::Address#compare"                       # the two comparable forms it built
-      - "EdiGem::Archive::Local#path_of"                # the uri's text
-      - "EdiGem::Source::Stedi::Directory#listed_payer_id" # the payers that answer to a code
-      - "EdiGem::Verdict#among"                         # the coverages it is reducing
-      # Stedi-shaped bodies the mock builds from the person asked about.
-      - "EdiGem::Source::Mock::Answers#collected"
-      - "EdiGem::Source::Mock::Answers#pending"
-
-  ControlParameter:
-    exclude:
-      # The caller's idempotency key overrides the one derived from the body (public #eligibility
-      # and #discovery document it).
-      - "EdiGem::Source::Stedi#post"
-      # Whether the person was asked about as a dependent is the caller's fact; it decides the
-      # order people are compared in.
-      - "EdiGem::Response#compared"
-      # The mock answers discovery itself; every other operation goes to Stedi's connection.
-      - "EdiGem::Source::Mock#connection_for"
-
-  BooleanParameter:
-    exclude:
-      # A fact the raiser knows: whether the same read or write may succeed later.
-      - "EdiGem::ArchiveFailed#initialize"
-
-  ManualDispatch:
-    exclude:
-      # Values at the gem's boundary, as callers hold them: a Date or a YYYYMMDD string, a date or
-      # time or plain text, a Person::Asked or the core as a hash.
-      - "EdiGem::Codec#self.yyyymmdd"
-      - "EdiGem::RequestKey#normalize"
-      - "EdiGem::MedicalPlan#given_fields"
-      # The mock's payers: a list, or a callable read on every discovery.
-      - "EdiGem::Source::Mock::Answers#payer_codes"
-
-  DataClump:
-    exclude:
-      # A key's inputs, through the functions that make it.
-      - "EdiGem::RequestKey"
-      # The day asked about and who: one question of an answer, public as keywords.
-      - "EdiGem::Response"
-      # An operation picks its policy; the path is per request (a discovery's handle).
-      - "EdiGem::Source::Connection"
-
-  # Two rescue arms, each runs alone: each call happens once.
-  DuplicateMethodCall:
-    exclude:
-      - "EdiGem::Archive::S3#reach"
-
-  # Frozen values with one reader per attribute.
-  TooManyInstanceVariables:
-    exclude:
-      - "EdiGem::ListedPayer"
-      - "EdiGem::Person::Asked"
-
-  TooManyMethods:
-    exclude:
-      # One method per scripted plan.
-      - "EdiGem::Source::Mock::Plans"
 
 directories:
   # A scripted stand-in for Stedi: scenario tables named by constant, chosen by an argument.

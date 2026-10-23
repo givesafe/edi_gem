@@ -43,6 +43,8 @@ module EdiGem
 
     # A discovery's: the best any plan found says, where a plan neither active nor inactive is no
     # denial. With no plan, the state decides.
+    # Reduces the coverages it was given.
+    # :reek:FeatureEnvy
     def among(coverages)
       return of_state if coverages.empty?
       return :active if coverages.any?(&:active?)

@@ -108,6 +108,8 @@ module EdiGem
       # Timeout::Error covers Net::OpenTimeout, ReadTimeout and WriteTimeout; IOError covers
       # EOFError; SystemCallError covers Errno::ECONNRESET, ECONNREFUSED, ECONNABORTED,
       # EHOSTUNREACH, ETIMEDOUT and EPIPE.
+      # Two rescue arms, and only one runs: each call happens once.
+      # :reek:DuplicateMethodCall
       def reach(request, path)
         client.request(request)
       rescue *NETWORK_ERRORS => error

@@ -3,6 +3,8 @@
 module EdiGem
   # What came back: benefits and rejections in the shared vocabulary, the raw payload, and the
   # exchanges that carried it.
+  # The day asked about and who: one question of an answer, public as keywords.
+  # :reek:DataClump
   class Response
     include Concealed
 
@@ -147,6 +149,8 @@ module EdiGem
     def reading = Verdict.new(state, provider_refused: provider_refusals.any?)
 
     # The first person who matches, in the order `identify` describes.
+    # Whether the person was asked about as a dependent is the caller's fact; it orders the comparison.
+    # :reek:ControlParameter
     def compared(asked, as_dependent, options)
       order = [subscriber_person, *dependent_people].compact
       found = (as_dependent ? order.rotate : order).map { |person| Identification.of(person, asked, **options) }

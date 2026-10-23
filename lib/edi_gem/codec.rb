@@ -134,6 +134,8 @@ module EdiGem
 
     # A day as X12 writes one, YYYYMMDD: a Date (anything answering strftime) formatted, anything
     # else as its text, nil as nil.
+    # A Date or a YYYYMMDD string, as callers hold a day.
+    # :reek:ManualDispatch
     def self.yyyymmdd(date) = date.respond_to?(:strftime) ? date.strftime(DAY_FORMAT) : date&.to_s
 
     # The days a span's `keys` name, then that end (`period_end`) of each period, in that order; only

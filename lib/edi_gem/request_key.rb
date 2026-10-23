@@ -9,6 +9,8 @@ module EdiGem
   #
   # `secret` is the caller's, one for each kind of key, so neither shares a secret with another
   # use. Case, spacing and blank details don't change a key.
+  # A key's inputs, through the functions that make it.
+  # :reek:DataClump
   module RequestKey
     OPERATIONS = %i[eligibility discovery batch_item batch].freeze
     SPACE = /[[:space:]]+/
@@ -35,6 +37,8 @@ module EdiGem
       OpenSSL::HMAC.hexdigest("SHA256", secret, JSON.generate(normalized.sort.to_h))
     end
 
+    # A date or time, or text, as callers hold a detail.
+    # :reek:ManualDispatch
     def normalize(value)
       value = value.iso8601 if value.respond_to?(:iso8601)
       value.to_s.gsub(SPACE, " ").strip.downcase

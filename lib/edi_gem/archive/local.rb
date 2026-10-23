@@ -28,6 +28,8 @@ module EdiGem
       end
 
       # As for S3: a uri this archive did not make is not retryable.
+      # Reads the uri's text.
+      # :reek:FeatureEnvy
       def path_of(uri)
         text = uri.to_s
         raise ArchiveFailed, "#{uri} is not a local archive's" unless text.start_with?("file://")

@@ -46,6 +46,8 @@ module EdiGem
     def inspect = PRINTED
     def to_s = PRINTED
 
+    # Ruby's pretty_print protocol, so `pp` never prints the digits.
+    # :reek:UtilityFunction
     def pretty_print(printer)
       printer.text(PRINTED)
     end

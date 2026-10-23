@@ -34,6 +34,8 @@ module EdiGem
           @people = people || @remembered.to_proc
         end
 
+        # The mock's check of a request body against what Stedi requires.
+        # :reek:UtilityFunction
         def valid?(body)
           REQUIRED.none? { |path| EdiGem.blank?(body.dig(*path)) }
         end
@@ -60,6 +62,8 @@ module EdiGem
 
         private
 
+        # Builds a Stedi-shaped body from the person asked about.
+        # :reek:FeatureEnvy
         def pending(name, subscriber)
           discovery_id = "mock-#{name}-#{SecureRandom.uuid}"
           @remembered[discovery_id] = Subscriber.new(first_name: subscriber["firstName"],
@@ -69,6 +73,8 @@ module EdiGem
         end
 
         # A pending discovery, found active for the person it was about.
+        # Builds a Stedi-shaped body from the person asked about.
+        # :reek:FeatureEnvy
         def collected(discovery_id)
           person = @people.call(discovery_id)
           return unless person
@@ -102,6 +108,8 @@ module EdiGem
 
         def meta = { "applicationMode" => "production", "traceId" => "mock-#{SecureRandom.hex(6)}" }
 
+        # The mock's payers: a list, or a callable read on every discovery.
+        # :reek:ManualDispatch
         def payer_codes = @payers.respond_to?(:call) ? @payers.call : @payers
 
         def confidence(name)

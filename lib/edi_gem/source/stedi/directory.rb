@@ -38,6 +38,8 @@ module EdiGem
 
         private
 
+        # Chooses among the payers that answer to a code.
+        # :reek:FeatureEnvy
         def listed_payer_id(code)
           answering = payers(code).select { |payer| payer.answers_to?(code) }
           found = answering.find { |payer| payer.code?(code) } || (answering.first if answering.one?)

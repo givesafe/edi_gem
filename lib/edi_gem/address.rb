@@ -41,6 +41,8 @@ module EdiGem
     #   :differs       either part disagrees
     #   :not_compared  this address lacks a first line or five postal digits: nothing of ours to compare
     #   :not_returned  ours has both, and the payer holds no address or lacks either part
+    # Compares the two forms it built.
+    # :reek:FeatureEnvy
     def compare(other)
       mine = comparable
       return :not_compared if mine.nil?

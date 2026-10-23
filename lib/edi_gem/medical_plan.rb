@@ -94,6 +94,8 @@ module EdiGem
 
     private
 
+    # `asked` is a Person::Asked or the core as a hash.
+    # :reek:ManualDispatch
     def given_fields
       @asked.respond_to?(:given_fields) ? @asked.given_fields(person) : {}
     end

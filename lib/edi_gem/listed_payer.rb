@@ -7,6 +7,8 @@ module EdiGem
   # the clearinghouse's own ID for it. `eligibility` is the clearinghouse's word for whether it
   # carries eligibility checks to this payer (Stedi's SUPPORTED, NOT_SUPPORTED,
   # ENROLLMENT_REQUIRED).
+  # A value with one reader per attribute.
+  # :reek:TooManyInstanceVariables
   class ListedPayer
     attr_reader :code, :clearinghouse_id, :name, :aliases, :eligibility
 

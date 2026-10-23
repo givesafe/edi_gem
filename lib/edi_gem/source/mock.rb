@@ -24,6 +24,8 @@ module EdiGem
 
       private
 
+      # The mock answers discovery itself; every other operation goes to Stedi's connection.
+      # :reek:ControlParameter
       def connection_for(operation)
         operation == :discovery ? discovery_connection : super
       end

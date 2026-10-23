@@ -139,6 +139,9 @@ module EdiGem
         Document::Json.parse(exchange.response_body)
       end
 
+      # The caller's idempotency key overrides the one derived from the body (#eligibility and
+      # #discovery document it).
+      # :reek:ControlParameter
       def post(operation, body, key: nil)
         connection_for(operation).post(operation, JSON.generate(body),
                                        idempotency_key: key || idempotency_key(operation, body))
