@@ -133,10 +133,6 @@ RSpec.describe EdiGem::RequestKey do
       expect(fingerprints.uniq).to eq ["94ea0de47974b17bc7aa546cd7fd6b6c5b4db41e37e448d352d3ef764d637610"]
     end
 
-    it "says which way a check asks" do
-      expect([check.asked_as, as_dependent.asked_as]).to eq(%i[subscriber dependent])
-    end
-
     it "gives a discovery the key and fingerprint the app gave it" do
       asked = discovery(addressed)
 

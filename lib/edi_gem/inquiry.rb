@@ -94,9 +94,9 @@ module EdiGem
         @credential = credential
       end
 
-      def asked_as = dependent? ? :dependent : :subscriber
-
       private
+
+      def asked_as = dependent? ? :dependent : :subscriber
 
       # A check's keys take `clearinghouse:`, the source it is sent through, since the payer code
       # is that source's. Its fingerprint is the same asked either way; a day's key is not: asked
