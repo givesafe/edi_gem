@@ -53,7 +53,7 @@ module EdiGem
         # The items `scenario` finds. Any scenario that finds nothing is an empty list.
         def for(scenario)
           code = EB01_BY_SCENARIO[scenario]
-          return each_payer(@person, code) if code
+          return each_payer(code) if code
           return [] unless SHAPED.include?(scenario)
 
           send(scenario)
@@ -61,31 +61,33 @@ module EdiGem
 
         private
 
-        def each_payer(person, code, service_types: MEDICAL)
-          @payers.map { |payer| item(person, payer, code, service_types: service_types) }
+        def each_payer(code, service_types: MEDICAL)
+          @payers.map { |payer| item(payer, code, service_types: service_types) }
         end
 
+        # The plans the same payers find for `person` instead: a scenario that finds the person as
+        # the payer holds them, not as asked about.
+        def of(person) = Plans.new(person, payers: @payers, today: @today)
+
         # Plans that name no birth date, so there is nothing to confirm the person by.
-        def unverified = each_payer(@person.except("dateOfBirth"), "1")
+        def unverified = of(@person.except("dateOfBirth")).for(:active)
 
         # The person as a payer spells them: plain, and a long first name cut short. Still the
         # person asked about.
         def spelled
           first_name, last_name = @person.values_at("firstName", "lastName").map { |name| Identity.plain(name) }
           person = @person.merge("firstName" => first_name.to_s[0, Identity::TRUNCATED_AT], "lastName" => last_name)
-          each_payer(person, "1")
+          of(person).for(:active)
         end
 
-        def other_person
-          each_payer(@person.merge("firstName" => "ALEX", "dateOfBirth" => MISMATCHED_BIRTH_DATE), "1")
-        end
+        def other_person = of(@person.merge("firstName" => "ALEX", "dateOfBirth" => MISMATCHED_BIRTH_DATE)).for(:active)
 
-        def other_payer = [item(@person, OTHER_PAYER, "1")]
+        def other_payer = [item(OTHER_PAYER, "1")]
 
         # Stedi puts the patient in `dependent` and the policyholder in `subscriber`.
         def dependent
           patient = @person.slice("firstName", "lastName", "dateOfBirth").merge(CHILD)
-          each_payer(@person, "1").map do |found|
+          each_payer("1").map do |found|
             found.merge("subscriber" => found["subscriber"].merge(POLICYHOLDER), "dependent" => patient)
           end
         end
@@ -93,8 +95,7 @@ module EdiGem
         # An active plan and an inactive one at every payer, under two member IDs.
         def mixed
           @payers.flat_map do |payer|
-            [item(@person, payer, "1", member_id: "MOCK#{payer}A"),
-             item(@person, payer, "6", member_id: "MOCK#{payer}B")]
+            [item(payer, "1", member_id: "MOCK#{payer}A"), item(payer, "6", member_id: "MOCK#{payer}B")]
           end
         end
 
@@ -104,33 +105,31 @@ module EdiGem
         def not_started = dated(@today >> 1, @today >> 24)
 
         def dated(begins, ends)
-          each_payer(@person, "1").each do |found|
+          each_payer("1").each do |found|
             found["planDateInformation"] = { "planBegin" => Codec.yyyymmdd(begins),
                                              "planEnd" => Codec.yyyymmdd(ends) }
           end
         end
 
-        def dental = each_payer(@person, "1", service_types: DENTAL)
+        def dental = each_payer("1", service_types: DENTAL)
 
         # A Medicaid MCO naming the state's Medicaid as its primary payer, and the state's own item.
         def medicaid_mco
           primary = { "entityIdentifier" => "Primary Payer", "entityType" => "Non-Person Entity",
                       "entityName" => "MOCK MEDICAID", "entityIdentification" => "PI",
                       "entityIdentificationValue" => MEDICAID_PAYER }
-          mco_items = each_payer(@person, "1").each { |found| name_primary_payer(found, primary) }
-          medicaid = item(@person, MEDICAID_PAYER, "1", member_id: MEDICAID_ID)
+          mco_items = each_payer("1").each do |found|
+            found["benefitsInformation"].each { |line| line["benefitsRelatedEntities"] = [primary] }
+          end
+          medicaid = item(MEDICAID_PAYER, "1", member_id: MEDICAID_ID)
           medicaid["planInformation"] = { "medicaidRecipientIdNumber" => MEDICAID_ID }
           mco_items + [medicaid]
         end
 
-        def name_primary_payer(found, primary)
-          found["benefitsInformation"].each { |line| line["benefitsRelatedEntities"] = [primary] }
-        end
-
         # `name` is the status's label; the plan's own name is in `planCoverage`, as Stedi sends it.
-        def item(person, payer, code, member_id: "MOCK#{payer}", service_types: MEDICAL)
-          { "subscriber" => person.slice("firstName", "lastName", "dateOfBirth")
-                                  .merge("memberId" => member_id, **SELF, **ON_RECORD),
+        def item(payer, code, member_id: "MOCK#{payer}", service_types: MEDICAL)
+          { "subscriber" => @person.slice("firstName", "lastName", "dateOfBirth")
+                                   .merge("memberId" => member_id, **SELF, **ON_RECORD),
             "payer" => { "name" => "MOCK PAYER #{payer}", "payorIdentification" => payer },
             "benefitsInformation" => [{ "code" => code, "name" => code.to_i <= 5 ? "Active Coverage" : "Inactive",
                                         "serviceTypeCodes" => service_types, "insuranceType" => "MC",
