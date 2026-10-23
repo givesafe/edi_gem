@@ -370,7 +370,7 @@ RSpec.describe EdiGem::Source::Mock do
     end
 
     it "refuses a request without the provider's NPI" do
-      client = described_class::Client.new(answers: described_class::Answers.new)
+      client = described_class::Client.new(answers: described_class::Answers.new(payers: ["11111"], people: nil))
       request = Net::HTTP::Post.new("/insurance-discovery").tap { |post| post.body = JSON.generate({}) }
 
       expect(client.request(request).code).to eq("400")

@@ -43,11 +43,11 @@ module EdiGem
         DENTAL = ["35"].freeze
 
         # `person` is Stedi's subscriber hash as asked about; `payers` the payer codes a plan is
-        # found at; `today` what the dated scenarios are dated from.
-        def initialize(person, payers:, today: Date.today)
+        # found at. The dated scenarios are dated from the day the Plans are made.
+        def initialize(person, payers:)
           @person = person
           @payers = payers
-          @today = today
+          @today = Date.today
         end
 
         # The items `scenario` finds. Any scenario that finds nothing is an empty list.
@@ -67,7 +67,7 @@ module EdiGem
 
         # The plans the same payers find for `person` instead: a scenario that finds the person as
         # the payer holds them, not as asked about.
-        def of(person) = Plans.new(person, payers: @payers, today: @today)
+        def of(person) = Plans.new(person, payers: @payers)
 
         # Plans that name no birth date, so there is nothing to confirm the person by.
         def unverified = of(@person.except("dateOfBirth")).for(:active)

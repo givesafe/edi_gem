@@ -23,7 +23,7 @@ module EdiGem
         # `call` with one, asked on every discovery. `people` finds the person a pending discovery
         # was about by its id (an EdiGem::Subscriber, or nil); without it, the mock remembers the
         # people it was asked about itself, for as long as it lives.
-        def initialize(payers: PAYERS, people: nil)
+        def initialize(payers:, people:)
           @payers = payers
           @remembered = {}
           @people = people || @remembered.to_proc

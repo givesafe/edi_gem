@@ -244,7 +244,7 @@ RSpec.describe EdiGem::Verdict do
     it "is pending WHEN the answer has not arrived" do
       answer = response(handle: "discovery-0001")
 
-      expect(answer.discovery_verdict(on: today)).to eq(:pending)
+      expect(verdict_of(answer)).to eq(:pending)
     end
   end
 end

@@ -275,7 +275,7 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   pending `Response`.
 - **Outcome.** A `Response`. `pending` with a `handle` when Stedi has not finished; call
   `resolve(handle)` later. Otherwise settled: `no_coverage` when Stedi found nothing. Read it with
-  `medical_plans(asked:)` and `discovery_verdict(on:)`.
+  `medical_plans(asked:)` and `discovery_verdict(on:, plans:)`.
 - **Effects.** `discovery` is one billed POST; `resolve` is a GET. The gem sends at most one
   discovery a second (a burst of 2), with a 130 s timeout. With `archive:`, each call writes under feature `discovery`: the
   POST writes a request and a response, and a GET writes a response only (`request_uri` nil).
@@ -360,7 +360,8 @@ response.error_code        # => nil
   its `verdict_code(on:)` the EB01 code behind that verdict, or nil.
 - `medical_plans(asked: nil)`: a discovery's `MedicalPlan`s. `asked` is the `Person::Asked`
   each plan is compared with.
-- `discovery_verdict(on:, plans: medical_plans)`: a verdict name for a discovery.
+- `discovery_verdict(on:, plans:)`: a verdict name for a discovery among `plans`, its
+  `medical_plans`.
 - `reading`: the `Verdict` for this answer's state and refusals, which reads a plan's coverage
   (`of_plan`, `code_of`, `among`). `CheckedPlan#verdict` and `#discovery_verdict` read through it.
 - `provider_standing`: what the answer says of our provider's standing with the payer.
