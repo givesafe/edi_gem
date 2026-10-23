@@ -372,8 +372,8 @@ response.error_code        # => nil
 
 ### Verdict names (proposed)
 
-`CheckedPlan#verdict` and `Response#discovery_verdict` give one of these names, the one word to
-record for an answer:
+`EdiGem::Verdict::NAMES` lists them, so a caller can check it records every one. `CheckedPlan#verdict`
+and `Response#discovery_verdict` give one of these names, the one word to record for an answer:
 
 | name | meaning |
 |---|---|
