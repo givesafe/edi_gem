@@ -26,7 +26,6 @@
 !/bin/console
 !/bin/setup
 /sig/
-/.reek.yml
 /lib/edi_gem/deidentify.rb
 /lib/edi_gem/deidentify/
 /spec/edi_gem/deidentify_spec.rb
