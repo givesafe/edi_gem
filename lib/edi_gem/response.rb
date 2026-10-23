@@ -17,6 +17,9 @@ module EdiGem
     # An unknown answer is never reported as no coverage.
     STATES = %i[complete partial no_coverage not_identified payer_silent rejected pending].freeze
 
+    # The states in which the payer answered for our provider: benefits, or a settled no coverage.
+    PROVIDER_ACCEPTED = %i[complete partial no_coverage].freeze
+
     TEST_MODE = "test"
 
     attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored,
@@ -100,6 +103,16 @@ module EdiGem
 
     def provider_refusals
       @rejections.select(&:about_provider?)
+    end
+
+    # What the answer says of our provider's standing with the payer: :refused when any refusal is
+    # about our provider, :accepted when the payer answered for it (PROVIDER_ACCEPTED), and nil when
+    # it did neither (it was silent, could not match the person, has not answered yet, or refused the
+    # request for another reason).
+    def provider_standing
+      return :refused if provider_refusals.any?
+
+      :accepted if PROVIDER_ACCEPTED.include?(state)
     end
 
     def active_benefits

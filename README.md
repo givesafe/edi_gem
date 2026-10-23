@@ -363,6 +363,11 @@ response.error_code        # => nil
 - `discovery_verdict(on:, plans: medical_plans)`: a verdict name for a discovery.
 - `reading`: the `Verdict` for this answer's state and refusals, which reads a plan's coverage
   (`of_plan`, `code_of`, `among`). `CheckedPlan#verdict` and `#discovery_verdict` read through it.
+- `provider_standing`: what the answer says of our provider's standing with the payer.
+  `:refused` when any refusal is about our provider (`provider_refusals`), whatever else came
+  back; `:accepted` when the payer answered for it (`complete`, `partial` or `no_coverage`); nil
+  when it did neither (`payer_silent`, `not_identified`, `pending`, or `rejected` for a reason
+  that is not our provider).
 
 ### Verdict names (proposed)
 

@@ -4,6 +4,8 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- `Response#provider_standing`: `:refused`, `:accepted` or nil, what an answer says of our
+  provider's standing with the payer, so a caller never reads the refusals and the state for it.
 - `Response#checked_plan`, `#medical_plans(asked:)`, `#discovery_verdict` and `#error_code`;
   `CheckedPlan#verdict` and `#verdict_code`; `EdiGem::CheckedPlan`, `EdiGem::MedicalPlan` (both
   `EdiGem::AnsweredPlan`) and `EdiGem::Verdict`. A caller reads a check or a discovery in coverage

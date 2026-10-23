@@ -111,6 +111,50 @@ RSpec.describe EdiGem::Response do
     end
   end
 
+  describe "#provider_standing" do
+    it "is refused when a refusal is about our provider, even beside benefit lines" do
+      response = described_class.new(benefits: [benefit(:active)], rejections: [rejection(:provider)])
+
+      expect(response.provider_standing).to eq(:refused)
+    end
+
+    it "is accepted when the payer answered with benefits" do
+      expect(described_class.new(benefits: [benefit(:active)]).provider_standing).to eq(:accepted)
+    end
+
+    it "is accepted when the payer answered for part of the question" do
+      response = described_class.new(benefits: [benefit(:active)], rejections: [rejection(:subscriber)])
+
+      expect(response.provider_standing).to eq(:accepted)
+    end
+
+    it "is accepted when the payer answered and found no coverage" do
+      expect(described_class.new.provider_standing).to eq(:accepted)
+    end
+
+    it "is nil when the payer did not answer" do
+      response = described_class.new(rejections: [rejection(:payer, :payer_unavailable)])
+
+      expect(response.provider_standing).to be_nil
+    end
+
+    it "is nil when the payer could not match the person" do
+      response = described_class.new(rejections: [rejection(:subscriber, :member_id_invalid)])
+
+      expect(response.provider_standing).to be_nil
+    end
+
+    it "is nil when the request was refused for a reason other than our provider" do
+      response = described_class.new(rejections: [rejection(:envelope)])
+
+      expect(response.provider_standing).to be_nil
+    end
+
+    it "is nil while an asynchronous answer has not arrived" do
+      expect(described_class.new(handle: "discovery-1").provider_standing).to be_nil
+    end
+  end
+
   it "keeps the response body in the dialect it arrived in" do
     payload = EdiGem::Payload.new(body: covered_271, dialect: :x12)
 
