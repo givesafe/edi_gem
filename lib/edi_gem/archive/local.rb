@@ -27,8 +27,11 @@ module EdiGem
                                 retryable: RETRYABLE_ERRORS.any? { |kind| error.is_a?(kind) })
       end
 
+      private
+
       # As for S3: a uri this archive did not make is not retryable.
-      # Reads the uri's text.
+      # The envied `text` is a local String this step makes from its argument; reek counts calls on a
+      # local as envy of another object.
       # :reek:FeatureEnvy
       def path_of(uri)
         text = uri.to_s
