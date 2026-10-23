@@ -29,6 +29,10 @@ RSpec.describe EdiGem::ListedPayer do
     expect([payer.code?("99999"), payer.code?("ALIAS1")]).to eq([true, false])
   end
 
+  it "is frozen: a setter raises" do
+    expect { payer.code = "88888" }.to raise_error(FrozenError)
+  end
+
   describe ".from_stedi" do
     it "reads a payer as Stedi's directory lists it" do
       read = described_class.from_stedi(
