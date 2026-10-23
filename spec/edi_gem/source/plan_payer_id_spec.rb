@@ -67,14 +67,19 @@ RSpec.describe "A discovered plan's payer ID" do
     expect([first, second, transport.paths.size]).to eq(["99999", "99999", 3])
   end
 
-  # rubocop:todo RSpec/MultipleExpectations -- over the gem's limit; whether to split it or raise the limit is Danny's call
-  it "raises a failed search, remembers nothing, and searches again when asked again" do
-    # rubocop:enable RSpec/MultipleExpectations
-    transport = failing_once.new([directory_answer])
-    source = EdiGem::Source::Stedi.new(api_key: "test_key", transport: transport, archive: nil)
+  context "WHEN a search fails" do
+    let(:transport) { failing_once.new([directory_answer]) }
+    let(:source) { EdiGem::Source::Stedi.new(api_key: "test_key", transport: transport, archive: nil) }
 
-    expect { source.payer_id_for("77027") }.to raise_error(EdiGem::Fault) { |fault| expect(fault.kind).to eq :timeout }
-    expect([source.payer_id_for("77027"), transport.paths.size]).to eq(["99999", 2])
+    it "raises it" do
+      expect { source.payer_id_for("77027") }.to raise_error(EdiGem::Fault) { |fault| expect(fault.kind).to eq :timeout }
+    end
+
+    it "remembers nothing, and searches again when asked again" do
+      expect { source.payer_id_for("77027") }.to raise_error(EdiGem::Fault)
+
+      expect([source.payer_id_for("77027"), transport.paths.size]).to eq(["99999", 2])
+    end
   end
 
   describe "an answer read again from the archive" do

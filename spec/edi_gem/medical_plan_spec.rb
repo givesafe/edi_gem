@@ -132,12 +132,12 @@ RSpec.describe EdiGem::MedicalPlan do
       end
     end
 
-    # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
     context "WHEN an MCO's plan names a Medicaid payer that came back as its own plan" do
-      # rubocop:enable RSpec/MultipleMemoizedHelpers
       let(:mco_line) { line.merge(primary_payer_code: "MCAID9") }
-      let(:medicaid_line) { { member_id: "MEDID0002", payer_code: "MCAID9", status: :active } }
-      let(:found) { [found_plan([mco_line], held), found_plan([medicaid_line], held)] }
+      let(:found) do
+        [found_plan([mco_line], held),
+         found_plan([{ member_id: "MEDID0002", payer_code: "MCAID9", status: :active }], held)]
+      end
 
       it "is one plan" do
         expect(plans.size).to eq 1
@@ -315,24 +315,29 @@ RSpec.describe EdiGem::MedicalPlan do
     end
   end
 
-  # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
   describe "the details given beside the core" do
-    # rubocop:enable RSpec/MultipleMemoizedHelpers
-    let(:address) { EdiGem::Address.new(line1: "1 Example St", postal_code: "40000") }
-    let(:asked_about) { EdiGem::Person::Asked.new(**asked, address: address, ssn: "000-00-1234") }
+    let(:asked_about) do
+      EdiGem::Person::Asked.new(**asked, address: EdiGem::Address.new(line1: "1 Example St", postal_code: "40000"),
+                                         ssn: "000-00-1234")
+    end
     let(:held) do
       { first_name: "TESTFIRST", last_name: "TESTLAST", date_of_birth: "19800101", address_line1: "1 EXAMPLE ST",
         postal_code: "40000", ssn: "XXX-XX-1234" }
     end
-    let(:identification) { EdiGem::Response.new(found_plans: found).medical_plans(asked: asked_about).fetch(0).identification }
+
+    # The plan found, compared with `about`.
+    def plan_for(about) = EdiGem::Response.new(found_plans: found).medical_plans(asked: about).fetch(0)
 
     it "compares each with the person the payer holds, beside the core" do
+      identification = plan_for(asked_about).identification
+
       expect([identification.given_fields, identification.match])
         .to eq([{ address: :matched, ssn_last_four: :matched }, :matched])
     end
 
     it "keeps the core's outcome WHEN a given detail differs" do
       held.merge!(ssn: "XXX-XX-4321")
+      identification = plan_for(asked_about).identification
 
       expect([identification.given_fields[:ssn_last_four], identification.match, identification.fields.values.uniq])
         .to eq([:differs, :matched, [:matched]])
@@ -341,14 +346,15 @@ RSpec.describe EdiGem::MedicalPlan do
     it "is not_returned for each WHEN the payer holds neither" do
       %i[address_line1 postal_code ssn].each { |field| held.delete(field) }
 
-      expect(identification.given_fields).to eq(address: :not_returned, ssn_last_four: :not_returned)
+      expect(plan_for(asked_about).identification.given_fields)
+        .to eq(address: :not_returned, ssn_last_four: :not_returned)
     end
 
     it "is not_compared for each WHEN ours can't be compared, whatever the payer holds" do
-      asked_about = EdiGem::Person::Asked.new(**asked, address: EdiGem::Address.new(city: "Example"), ssn: "12")
-      plan = EdiGem::Response.new(found_plans: found).medical_plans(asked: asked_about).fetch(0)
+      uncomparable = EdiGem::Person::Asked.new(**asked, address: EdiGem::Address.new(city: "Example"), ssn: "12")
 
-      expect(plan.identification.given_fields).to eq(address: :not_compared, ssn_last_four: :not_compared)
+      expect(plan_for(uncomparable).identification.given_fields)
+        .to eq(address: :not_compared, ssn_last_four: :not_compared)
     end
 
     # A polled answer whose question could not be recovered is compared with nobody, never with the
@@ -361,7 +367,7 @@ RSpec.describe EdiGem::MedicalPlan do
     [false, true].each do |revealed|
       it "prints no digit of either SSN, the plan or its identification, WHEN EdiGem.reveal is #{revealed}" do
         EdiGem.reveal = revealed
-        plan = EdiGem::Response.new(found_plans: found).medical_plans(asked: asked_about).fetch(0)
+        plan = plan_for(asked_about)
         plan.identification
 
         expect([plan.inspect, PP.pp(plan, +""), plan.identification.inspect, PP.pp(plan.identification, +"")].join)

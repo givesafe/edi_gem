@@ -13,16 +13,11 @@ RSpec.describe EdiGem::AnsweredPlan do
   end
   let(:person) { EdiGem::Person.new(role: :subscriber, relationship_code: "18", **held) }
 
-  let(:other) { EdiGem::Person.new(role: :subscriber, relationship_code: "18", **held, first_name: "OTHER") }
-  let(:dependent) { EdiGem::Person.new(role: :dependent, relationship_code: "19", **held) }
-
   # The payer refused the birth date it was sent (AAA 71).
   let(:refusal) { [EdiGem::Rejection.new(level: :subscriber, code: :date_of_birth_mismatch)] }
 
   # Each host builds `plan` from `answer(benefits:, people:, rejections:)`.
-  # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
   shared_examples "an answered plan" do
-    # rubocop:enable RSpec/MultipleMemoizedHelpers
     let(:plan) { answer(benefits: benefits, people: [person]) }
 
     it "answers the payer, the IDs and the plan's names in the same words" do
@@ -51,12 +46,15 @@ RSpec.describe EdiGem::AnsweredPlan do
     end
 
     it "is mismatched WHEN the payer answered about someone else, and the plan's status is still its own" do
+      other = EdiGem::Person.new(role: :subscriber, relationship_code: "18", **held, first_name: "OTHER")
       plan = answer(benefits: benefits, people: [other])
 
       expect([plan.identification.match, plan.status_on(day), plan.relationship]).to eq(%i[mismatched active self])
     end
 
     it "is the dependent WHEN the payer matched the person as one" do
+      other = EdiGem::Person.new(role: :subscriber, relationship_code: "18", **held, first_name: "OTHER")
+      dependent = EdiGem::Person.new(role: :dependent, relationship_code: "19", **held)
       plan = answer(benefits: benefits, people: [other, dependent])
 
       expect([plan.relationship, plan.identification.match]).to eq(%i[dependent matched])
@@ -143,9 +141,7 @@ RSpec.describe EdiGem::AnsweredPlan do
   end
 
   # As InsuranceCoverageBenefit.replace_for keeps them.
-  # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
   describe EdiGem::AnsweredPlan::Line do
-    # rubocop:enable RSpec/MultipleMemoizedHelpers
     let(:lines) do
       described_class.all([EdiGem::Benefit.new(status: :active, service_types: ["30"], insurance_type: "MC"),
                            EdiGem::Benefit.new(benefit_type: :co_payment, service_types: %w[98 UC], in_network: true),

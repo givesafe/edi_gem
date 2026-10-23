@@ -103,17 +103,15 @@ RSpec.describe EdiGem::CheckedPlan do
     end
   end
 
-  # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
   describe "an answer read from Stedi" do
-    # rubocop:enable RSpec/MultipleMemoizedHelpers
-    let(:provider) { EdiGem::Provider.new(npi: "1999999984", organization_name: "EXAMPLECLINIC") }
-    let(:subscriber) { EdiGem::Subscriber.new(member_id: "MOCK00000001", last_name: "Testlast") }
-    let(:answer) do
+    let(:plan) do
       source, = stedi_answering(canned("stedi_271_active_coverage"))
-      source.eligibility(EdiGem::Inquiry::Eligibility.new(payer_code: "77027", subscriber: subscriber,
-                                                          provider: provider))
+      inquiry = EdiGem::Inquiry::Eligibility.new(
+        payer_code: "77027", provider: EdiGem::Provider.new(npi: "1999999984", organization_name: "EXAMPLECLINIC"),
+        subscriber: EdiGem::Subscriber.new(member_id: "MOCK00000001", last_name: "Testlast")
+      )
+      source.eligibility(inquiry).checked_plan
     end
-    let(:plan) { answer.checked_plan }
 
     it "reads the plan the payer named" do
       expect([plan.payer_code, plan.member_id.size, plan.plan_name, plan.plan_number, plan.group_number])
@@ -141,13 +139,15 @@ RSpec.describe EdiGem::CheckedPlan do
       expect([plan.plan_begins_on, plan.plan_ends_on]).to eq([nil, nil])
     end
 
+    # Stedi's answer of active coverage, with `dates` as its planDateInformation.
+    def answer_dated(dates)
+      body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_271_active_coverage.json")))
+      canned_body(body.merge("planDateInformation" => dates))
+    end
+
     PlanDateForms::ALL.each do |form, (dates, expected)|
-      # rubocop:todo RSpec/ExampleLength -- over the gem's limit; whether to split it or raise the limit is Danny's call
       it "are read from a check's planDateInformation WHEN it holds #{form}" do
-        # rubocop:enable RSpec/ExampleLength
-        body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_271_active_coverage.json")))
-        body["planDateInformation"] = dates
-        source, = stedi_answering(canned_body(body))
+        source, = stedi_answering(answer_dated(dates))
         inquiry = EdiGem::Inquiry::Eligibility.new(
           payer_code: "FLMCD", provider: EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic"),
           subscriber: EdiGem::Subscriber.new(member_id: "MOCK00000001", last_name: "Testlast",
