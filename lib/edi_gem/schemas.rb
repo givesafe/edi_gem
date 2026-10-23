@@ -3,15 +3,25 @@
 # The schemas shipped with the gem. An X12 source reuses :x12_271; a JSON source declares its
 # own. The codecs are shared, because JSON vendors re-expose the X12 code sets.
 EdiGem::Schema.define(:x12_271) do
-  benefit "2110C/EB" do
-    field :status, from: "EB01", codec: :eb01_status
-    field :status_code, from: "EB01", codec: :eb01_status_code
-    field :benefit_type, from: "EB01", codec: :eb01_benefit
-    field :service_types, from: "EB03", codec: :codes
-    field :insurance_type, from: "EB04"
-    field :plan_name, from: "EB05"
-    field :in_network, from: "EB12", codec: :yes_no
+  # A level's benefit lines and its dates: the subscriber's in loop 2000C, a dependent's in 2000D.
+  lines = lambda do |level|
+    benefit "2110#{level}/EB" do
+      field :status, from: "EB01", codec: :eb01_status
+      field :status_code, from: "EB01", codec: :eb01_status_code
+      field :benefit_type, from: "EB01", codec: :eb01_benefit
+      field :service_types, from: "EB03", codec: :codes
+      field :insurance_type, from: "EB04"
+      field :plan_name, from: "EB05"
+      field :in_network, from: "EB12", codec: :yes_no
+    end
   end
+
+  dates = lambda do |level|
+    benefit("2100#{level}/DTP[356]") { field :begins_on, from: "DTP03" }
+    benefit("2100#{level}/DTP[357]") { field :ends_on, from: "DTP03" }
+  end
+
+  lines.call("C")
 
   benefit "2100C/NM1[IL]" do
     field :member_id, from: "NM109"
@@ -22,13 +32,7 @@ EdiGem::Schema.define(:x12_271) do
     field :payer_code, from: "NM109"
   end
 
-  benefit "2100C/DTP[356]" do
-    field :begins_on, from: "DTP03"
-  end
-
-  benefit "2100C/DTP[357]" do
-    field :ends_on, from: "DTP03"
-  end
+  dates.call("C")
 
   # Share of cost (AMT*R): eligible, with an amount owed before coverage pays. Neither a refusal
   # nor plain active coverage.
@@ -36,44 +40,18 @@ EdiGem::Schema.define(:x12_271) do
     field :share_of_cost, from: "AMT02"
   end
 
-  rejection "2100A/AAA", level: :payer do
-    field :code, from: "AAA03", codec: :aaa03
-    field :followup, from: "AAA04"
+  # The refusals at each level: the payer (2100A), the provider (2100B), the subscriber (2100C) and,
+  # when the patient is a dependent, the dependent (2100D).
+  { "A" => :payer, "B" => :provider, "C" => :subscriber, "D" => :dependent }.each do |level, refused_at|
+    rejection "2100#{level}/AAA", level: refused_at do
+      field :code, from: "AAA03", codec: :aaa03
+      field :followup, from: "AAA04"
+    end
   end
 
-  rejection "2100B/AAA", level: :provider do
-    field :code, from: "AAA03", codec: :aaa03
-    field :followup, from: "AAA04"
-  end
-
-  rejection "2100C/AAA", level: :subscriber do
-    field :code, from: "AAA03", codec: :aaa03
-    field :followup, from: "AAA04"
-  end
-
-  # When the patient is a dependent, their lines, dates and refusals are in loop 2000D.
-  benefit "2110D/EB" do
-    field :status, from: "EB01", codec: :eb01_status
-    field :status_code, from: "EB01", codec: :eb01_status_code
-    field :benefit_type, from: "EB01", codec: :eb01_benefit
-    field :service_types, from: "EB03", codec: :codes
-    field :insurance_type, from: "EB04"
-    field :plan_name, from: "EB05"
-    field :in_network, from: "EB12", codec: :yes_no
-  end
-
-  benefit "2100D/DTP[356]" do
-    field :begins_on, from: "DTP03"
-  end
-
-  benefit "2100D/DTP[357]" do
-    field :ends_on, from: "DTP03"
-  end
-
-  rejection "2100D/AAA", level: :dependent do
-    field :code, from: "AAA03", codec: :aaa03
-    field :followup, from: "AAA04"
-  end
+  # When the patient is a dependent, their lines and dates are in loop 2000D.
+  lines.call("D")
+  dates.call("D")
 
   # The people the 271 names: NM1 (IL the subscriber, 03 a dependent), DMG and INS at each
   # level. INS02 is the relationship, INS03 and INS04 the maintenance codes.
@@ -153,32 +131,14 @@ EdiGem::Schema.define(:stedi) do
     field :coverage_ends_on, from: "", codec: :span_end
   end
 
-  rejection "payer.aaaErrors[]", level: :payer do
-    field :code, from: "code", codec: :aaa03
-    field :description, from: "description"
-    field :followup, from: "followupAction"
-    field :resolution, from: "possibleResolutions"
-  end
-
-  rejection "provider.aaaErrors[]", level: :provider do
-    field :code, from: "code", codec: :aaa03
-    field :description, from: "description"
-    field :followup, from: "followupAction"
-    field :resolution, from: "possibleResolutions"
-  end
-
-  rejection "subscriber.aaaErrors[]", level: :subscriber do
-    field :code, from: "code", codec: :aaa03
-    field :description, from: "description"
-    field :followup, from: "followupAction"
-    field :resolution, from: "possibleResolutions"
-  end
-
-  rejection "dependents[].aaaErrors[]", level: :dependent do
-    field :code, from: "code", codec: :aaa03
-    field :description, from: "description"
-    field :followup, from: "followupAction"
-    field :resolution, from: "possibleResolutions"
+  { "payer" => :payer, "provider" => :provider, "subscriber" => :subscriber,
+    "dependents[]" => :dependent }.each do |lane, refused_at|
+    rejection "#{lane}.aaaErrors[]", level: refused_at do
+      field :code, from: "code", codec: :aaa03
+      field :description, from: "description"
+      field :followup, from: "followupAction"
+      field :resolution, from: "possibleResolutions"
+    end
   end
 
   # The subscriber is always the policyholder (18). A dependent's memberId is never sent; theirs

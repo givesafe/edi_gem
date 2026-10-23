@@ -97,19 +97,8 @@ module EdiGem
     SPAN_PERIODS = %w[benefit eligibility plan].freeze
     DAY = /\A\d{8}\z/
 
-    SPAN_BEGIN = lambda do |dates|
-      return nil unless dates.is_a?(Hash)
-
-      (dates.values_at(*SPAN_BEGINS) + dates.values_at(*SPAN_PERIODS).map(&RD8_START))
-        .find { |day| day.to_s.match?(DAY) }
-    end
-
-    SPAN_END = lambda do |dates|
-      return nil unless dates.is_a?(Hash)
-
-      (dates.values_at(*SPAN_ENDS) + dates.values_at(*SPAN_PERIODS).map(&RD8_END))
-        .select { |day| day.to_s.match?(DAY) }.min
-    end
+    SPAN_BEGIN = ->(dates) { span_days(dates, SPAN_BEGINS, RD8_START).first }
+    SPAN_END = ->(dates) { span_days(dates, SPAN_ENDS, RD8_END).min }
 
     # The payer a benefit line names as primary (2120C, `benefitsRelatedEntities`), which need not
     # be the payer that answered. Only a PI qualifier makes the value a payer code.
@@ -146,6 +135,14 @@ module EdiGem
     # A day as X12 writes one, YYYYMMDD: a Date (anything answering strftime) formatted, anything
     # else as its text, nil as nil.
     def self.yyyymmdd(date) = date.respond_to?(:strftime) ? date.strftime(DAY_FORMAT) : date&.to_s
+
+    # The days a span's `keys` name, then that end (`period_end`) of each period, in that order; only
+    # real YYYYMMDD strings. None when `dates` is not a hash.
+    def self.span_days(dates, keys, period_end)
+      return [] unless dates.is_a?(Hash)
+
+      (dates.values_at(*keys) + dates.values_at(*SPAN_PERIODS).map(&period_end)).select { |day| day.to_s.match?(DAY) }
+    end
 
     # A codec is a lookup table, or a rule when the mapping is not one value to one value.
     def self.decode(name, value)
