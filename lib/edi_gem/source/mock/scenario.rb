@@ -54,6 +54,13 @@ module EdiGem
                        found_with_error: ["42", "Loop 2100A"], not_found: ["75", "Loop 2100C"],
                        partial: ["15", "Loop 2100C"] }.freeze
 
+        # Codes whose follow-up is not "Please Correct and Resubmit".
+        FOLLOWUPS = { "42" => "Resubmission Not Allowed", "80" => "Resubmission Not Allowed",
+                      "04" => "Resubmission Not Allowed" }.freeze
+
+        # The warning Stedi adds to a confident answer.
+        WARNINGS = [{ "code" => "MOCK", "description" => "mock warning" }].freeze
+
         def initialize(last_name)
           @key = last_name.to_s.downcase.delete("^a-z0-9")
         end
@@ -66,14 +73,42 @@ module EdiGem
 
         def pending? = PENDING.include?(name)
 
+        # The COMPLETE answer to a discovery of this scenario: the plans it finds among `plans`,
+        # under `discovery_id` (a new one when nil), with Stedi's confidence, errors and warnings.
+        def complete(plans, discovery_id = nil)
+          items = plans.for(name).each { |item| item["confidence"] = confidence }
+          Answer.new(status: Stedi::Responses::COMPLETE, discovery_id: discovery_id, items: items,
+                     errors: errors, warnings: warnings)
+        end
+
+        private
+
+        # How sure Stedi says it is that each plan found is the person's, in Stedi's shape.
+        def confidence
+          return { "level" => "HIGH", "reason" => "Name, date of birth and state matched" } if name == :confident
+
+          { "level" => "REVIEW_NEEDED" }
+        end
+
+        # Stedi's warnings on the answer, or nil when it has none.
+        def warnings = (WARNINGS if name == :confident)
+
+        # Stedi's errors on the answer: the rejection this scenario is answered with, or none.
+        def errors
+          code, location = rejection
+          return [] unless code
+
+          [{ "field" => "AAA", "code" => code, "description" => "mock rejection #{code}",
+             "followupAction" => FOLLOWUPS.fetch(code, "Please Correct and Resubmit"), "location" => location,
+             "possibleResolutions" => "mock" }]
+        end
+
         # The AAA03 code and loop this scenario is rejected with, or nil when it is not.
         def rejection
           return [aaa_code, aaa_location] if aaa_code
 
           REJECTIONS[name]
         end
-
-        private
 
         # The code an "Aaa" last name asks for, when Stedi publishes it.
         def aaa_code

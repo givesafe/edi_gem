@@ -11,26 +11,28 @@ module EdiGem
       # GET by id collects a pending one. Answers are Net::HTTP responses, with Stedi's HTTP
       # statuses, so the Transport reads them as it reads Stedi's.
       class Client
-        # Scenarios answered with an HTTP failure: status and body (Stedi's error shape; 429 has its own).
+        # Seconds a 409 asks to wait, as Stedi's Retry-After does.
+        IN_FLIGHT_RETRY_AFTER = "1"
+
+        # Scenarios answered with an HTTP failure, in Stedi's error shape (429 has its own).
         FAILURES = {
-          invalid: [400, { "error" => "ValidationError", "message" => "The request body is invalid." }],
-          forbidden: [403, { "message" => "Forbidden" }],
-          in_flight: [409, { "error" => "Conflict",
-                             "message" => "A request with this idempotency key is in progress." }],
-          key_reused: [422, { "error" => "UnprocessableEntity",
-                              "message" => "This idempotency key was used with a different request." }],
-          throttled: [429, { "message" => "The request can't be submitted because the sender's submission has been " \
-                                          "throttled: CUSTOMER_LIMIT", "code" => "TOO_MANY_REQUESTS" }],
-          server_error: [500, { "error" => "InternalServerError", "message" => "Internal server error." }],
-          unavailable: [503, { "error" => "ServiceUnavailable", "message" => "Service unavailable." }],
-          gateway_timeout: [504, { "error" => "GatewayTimeout", "message" => "Gateway timeout." }]
+          invalid: Reply.new(400, { "error" => "ValidationError", "message" => "The request body is invalid." }),
+          forbidden: Reply.new(403, { "message" => "Forbidden" }),
+          in_flight: Reply.new(409, { "error" => "Conflict",
+                                      "message" => "A request with this idempotency key is in progress." },
+                               { "retry-after" => IN_FLIGHT_RETRY_AFTER }),
+          key_reused: Reply.new(422, { "error" => "UnprocessableEntity",
+                                       "message" => "This idempotency key was used with a different request." }),
+          throttled: Reply.new(429, { "message" => "The request can't be submitted because the sender's " \
+                                                   "submission has been throttled: CUSTOMER_LIMIT",
+                                      "code" => "TOO_MANY_REQUESTS" }),
+          server_error: Reply.new(500, { "error" => "InternalServerError", "message" => "Internal server error." }),
+          unavailable: Reply.new(503, { "error" => "ServiceUnavailable", "message" => "Service unavailable." }),
+          gateway_timeout: Reply.new(504, { "error" => "GatewayTimeout", "message" => "Gateway timeout." })
         }.freeze
 
         # Stedi keeps a discovery's result for 30 days; an id it no longer has, or never had, is a 404.
-        NOT_FOUND = [404, { "error" => "NotFound", "message" => "Not found." }].freeze
-
-        # Seconds a 409 asks to wait, as Stedi's Retry-After does.
-        IN_FLIGHT_RETRY_AFTER = "1"
+        NOT_FOUND = Reply.new(404, { "error" => "NotFound", "message" => "Not found." }).freeze
 
         # `answers` builds the bodies.
         def initialize(answers:)
@@ -48,46 +50,30 @@ module EdiGem
 
         def asked(request)
           body = JSON.parse(request.body)
-          return http_response(*FAILURES[:invalid]) unless Answers.valid?(body)
+          return FAILURES.fetch(:invalid).to_net_http unless Answers.valid?(body)
 
           scenario = Scenario.new(body.dig("subscriber", "lastName"))
           failed(scenario.name, request["Idempotency-Key"]) ||
-            answered(@answers.discovery(body, scenario))
+            @answers.discovery(body, scenario).reply.to_net_http
         end
 
         def failed(name, key)
           raise Net::ReadTimeout, "mock discovery timed out" if name == :timeout
           return throttled_once(key) if name == :throttled_once
-          return unless FAILURES.key?(name)
 
-          headers = name == :in_flight ? { "retry-after" => IN_FLIGHT_RETRY_AFTER } : {}
-          http_response(*FAILURES.fetch(name), headers)
+          FAILURES[name]&.to_net_http
         end
 
         # Throttled the first time a key is sent, answered the next.
         def throttled_once(key)
-          http_response(*FAILURES[:throttled]) if @throttled_keys.add?(key)
+          FAILURES.fetch(:throttled).to_net_http if @throttled_keys.add?(key)
         end
 
         def collected(discovery_id)
-          body = @answers.resolved(discovery_id)
-          return http_response(*NOT_FOUND) unless body
+          answer = @answers.resolved(discovery_id)
+          return NOT_FOUND.to_net_http unless answer
 
-          answered(body)
-        end
-
-        # A pending discovery is answered 202, as Stedi answers one it is still working on.
-        def answered(body)
-          http_response(body["status"] == Answers::PENDING ? 202 : 200, body)
-        end
-
-        def http_response(code, body, headers = {})
-          status = code.to_s
-          response = Net::HTTPResponse::CODE_TO_OBJ.fetch(status).new("1.1", status, "")
-          { "content-type" => "application/json" }.merge(headers).each { |name, value| response[name] = value }
-          response.instance_variable_set(:@body, JSON.generate(body))
-          response.instance_variable_set(:@read, true)
-          response
+          answer.reply.to_net_http
         end
       end
     end
