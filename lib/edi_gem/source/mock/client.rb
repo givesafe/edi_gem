@@ -48,7 +48,7 @@ module EdiGem
 
         def asked(request)
           body = JSON.parse(request.body)
-          return http_response(*FAILURES[:invalid]) unless @answers.valid?(body)
+          return http_response(*FAILURES[:invalid]) unless Answers.valid?(body)
 
           scenario = Scenario.new(body.dig("subscriber", "lastName"))
           failed(scenario.name, request["Idempotency-Key"]) ||

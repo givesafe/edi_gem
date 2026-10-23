@@ -35,8 +35,7 @@ module EdiGem
         end
 
         # The mock's check of a request body against what Stedi requires.
-        # :reek:UtilityFunction
-        def valid?(body)
+        def self.valid?(body)
           REQUIRED.none? { |path| EdiGem.blank?(body.dig(*path)) }
         end
 
@@ -62,7 +61,8 @@ module EdiGem
 
         private
 
-        # Builds a Stedi-shaped body from the person asked about.
+        # Reads the person from the request body into the Subscriber it remembers. The envied
+        # object is that body's subscriber, a Hash parsed from JSON, which can't take the method.
         # :reek:FeatureEnvy
         def pending(name, subscriber)
           discovery_id = "mock-#{name}-#{SecureRandom.uuid}"
@@ -73,7 +73,9 @@ module EdiGem
         end
 
         # A pending discovery, found active for the person it was about.
-        # Builds a Stedi-shaped body from the person asked about.
+        # Subscriber#to_h is the request's shape, not the one Plans reads: symbol keys, names as
+        # Identity.plain spells them, blanks dropped. Using it would change what a collected answer
+        # echoes for a person `people` returns, which is a question for the mock's owner.
         # :reek:FeatureEnvy
         def collected(discovery_id)
           person = @people.call(discovery_id)
@@ -108,7 +110,9 @@ module EdiGem
 
         def meta = { "applicationMode" => "production", "traceId" => "mock-#{SecureRandom.hex(6)}" }
 
-        # The mock's payers: a list, or a callable read on every discovery.
+        # The mock's payers: a list, or a callable read on every discovery. `payers:` takes both:
+        # the documented form is a list, and the app passes a callable (`-> { Deployment.payer_ids }`),
+        # so telling them apart stays here, in the one place that reads them.
         # :reek:ManualDispatch
         def payer_codes = @payers.respond_to?(:call) ? @payers.call : @payers
 
