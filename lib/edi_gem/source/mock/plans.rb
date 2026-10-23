@@ -8,7 +8,8 @@ module EdiGem
       # The coverages a scenario finds for one person, as Stedi's items: one per payer, each with
       # its subscriber, payer and benefit lines. Every value is made up. Codes are X12: EB01 1 to 5
       # active and 6 to 8 inactive (5, 7 and 8 pending an investigation or update).
-      # One method per scripted plan.
+      # Reek counts methods; here each SHAPED scenario is a method that #for reaches by name, so
+      # the count grows with the scripted scenarios, not with what the class is responsible for.
       # :reek:TooManyMethods
       class Plans
         # Scenarios that find one plan at every payer, with this EB01 code.

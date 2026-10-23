@@ -43,7 +43,8 @@ module EdiGem
 
     # A discovery's: the best any plan found says, where a plan neither active nor inactive is no
     # denial. With no plan, the state decides.
-    # Reduces the coverages it was given.
+    # The envied `coverages` is the Array of Findings it was given, which it reduces to one name:
+    # a method that transforms the data it was given, and an Array can't take the method.
     # :reek:FeatureEnvy
     def among(coverages)
       return of_state if coverages.empty?

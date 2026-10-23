@@ -134,7 +134,10 @@ module EdiGem
 
     # A day as X12 writes one, YYYYMMDD: a Date (anything answering strftime) formatted, anything
     # else as its text, nil as nil.
-    # A Date or a YYYYMMDD string, as callers hold a day.
+    # Callers hold a day as a Date or as text they pass through: a YYYYMMDD day, an X12 range
+    # (YYYYMMDD-YYYYMMDD, which a 270's DTP carries) or a hyphenated day Identity strips. The two
+    # are Ruby's Date and String, so there is no class of ours to send the message to; the same
+    # respond_to? was written out in Coverage, Identity and Inquiry in old code, and is one here.
     # :reek:ManualDispatch
     def self.yyyymmdd(date) = date.respond_to?(:strftime) ? date.strftime(DAY_FORMAT) : date&.to_s
 

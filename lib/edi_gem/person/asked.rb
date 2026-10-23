@@ -9,7 +9,10 @@ module EdiGem
     # A discovery may also have been given an address (an Address) and an SSN, details beside the
     # core: they are compared apart (#given_fields) and never change how the core compares. Of
     # the SSN only the last four are kept (LastFour), and nothing reads them back.
-    # A frozen value with one reader per attribute.
+    # Five values: the core's three and the two details given beside it. Every one has a reader
+    # but the last four, which nothing reads back (#given_fields compares them). Whether the two
+    # given details are a value of their own (a Given beside the core) is an open question for
+    # the gem's owner.
     # :reek:TooManyInstanceVariables
     class Asked
       include Concealed

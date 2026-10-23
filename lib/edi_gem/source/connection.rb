@@ -7,7 +7,9 @@ module EdiGem
   module Source
     # HTTP for a source: builds the request with the vendor's standing headers, sends it through
     # a Transport per operation, and records the Exchange verbatim.
-    # An operation picks its policy; the path is per request (a discovery's handle).
+    # (operation, path) is old code's clump: get, url_for and send_request took it before this
+    # work, and old code is add-only. The fix to weigh later is an Endpoint per operation, holding
+    # its policy, URL and Transport.
     # :reek:DataClump
     class Connection
       include Concealed

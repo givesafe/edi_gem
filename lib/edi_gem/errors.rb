@@ -48,7 +48,9 @@ module EdiGem
   # Archive::Local for which), false for a missing or refused object. False unless the raiser
   # says otherwise, so a failure nobody classified is not retried.
   class ArchiveFailed < Error
-    # A fact the raiser knows: whether the same read or write may succeed later.
+    # A fact the raiser knows: whether the same read or write may succeed later. Reek reads a
+    # boolean default as a flag that picks a branch; this one is never branched on here, only
+    # kept and answered by #retryable?.
     # :reek:BooleanParameter
     def initialize(message = nil, retryable: false)
       @retryable = retryable

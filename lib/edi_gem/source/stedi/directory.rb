@@ -38,7 +38,9 @@ module EdiGem
 
         private
 
-        # Chooses among the payers that answer to a code.
+        # Chooses among the payers that answer to a code. Each payer's own test is already its
+        # message (answers_to?, code?); the choice is among several, which no one ListedPayer
+        # holds, so the calls reek counts are on the list it searched.
         # :reek:FeatureEnvy
         def listed_payer_id(code)
           answering = payers(code).select { |payer| payer.answers_to?(code) }

@@ -25,6 +25,8 @@ module EdiGem
       private
 
       # The mock answers discovery itself; every other operation goes to Stedi's connection.
+      # `operation` is the argument of Stedi's own hook (#connection_for), which this overrides, and
+      # the conditional is the one place a connection is selected (RAILS.md section 4).
       # :reek:ControlParameter
       def connection_for(operation)
         operation == :discovery ? discovery_connection : super
