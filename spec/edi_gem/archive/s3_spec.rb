@@ -170,9 +170,14 @@ RSpec.describe EdiGem::Archive::S3 do
       end
     end
 
-    it "refuses an object in another bucket, sending nothing, as a failure asking again will not change" do
+    it "refuses an object in another bucket, as a failure asking again will not change" do
       expect { archive.fetch("s3://elsewhere/raw/x.json") }
         .to raise_error(EdiGem::ArchiveFailed, %r{not in s3://warehouse}) { |failed| expect(failed).to_not be_retryable }
+    end
+
+    it "sends nothing for an object in another bucket" do
+      expect { archive.fetch("s3://elsewhere/raw/x.json") }.to raise_error(EdiGem::ArchiveFailed)
+
       expect(sent).to be_empty
     end
   end

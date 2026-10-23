@@ -439,17 +439,16 @@ RSpec.describe "calling Stedi" do
       expect(source.archived_question(uri).person.given_fields(held)).to eq(address: :matched, ssn_last_four: :matched)
     end
 
-    it "prints no digit of the SSN, revealed or not" do
-      source, uri = kept_request
-      person = source.archived_question(uri).person
-      printed = [false, true].map do |revealed|
+    [false, true].each do |revealed|
+      it "prints no digit of the SSN WHEN EdiGem.reveal is #{revealed}" do
+        source, uri = kept_request
+        person = source.archived_question(uri).person
         EdiGem.reveal = revealed
-        [person.inspect, PP.pp(person, +"")].join
+
+        expect([person.inspect, PP.pp(person, +"")].join).to_not include("1234")
       ensure
         EdiGem.reveal = false
       end
-
-      expect(printed.join).to_not include("1234")
     end
 
     it "carries neither given detail WHEN the request carried neither, and a birth date that isn't a day as nil" do
@@ -492,15 +491,14 @@ RSpec.describe "calling Stedi" do
         .to raise_error(EdiGem::ArchiveFailed) { |failed| expect(failed).to_not be_retryable }
     end
 
-    it "raises UnreadableBody WHEN the body is not JSON, or not a discovery request" do
-      source, = stedi_answering(archive: archive)
-      bodies = ["<html>", "[]", '{"subscriber":"A"}', '{"subscriber":{}}', '{"subscriber":{},"encounter":"x"}',
-                '{"subscriber":{},"encounter":{"beginningDateOfService":"2026"}}',
-                '{"subscriber":{},"encounter":{"beginningDateOfService":"20261340"}}',
-                '{"subscriber":{},"encounter":{"beginningDateOfService":20260901}}',
-                '{"subscriber":{},"encounter":{"beginningDateOfService":null}}', '{"subscriber":{},"encounter":{}}']
+    ["<html>", "[]", '{"subscriber":"A"}', '{"subscriber":{}}', '{"subscriber":{},"encounter":"x"}',
+     '{"subscriber":{},"encounter":{"beginningDateOfService":"2026"}}',
+     '{"subscriber":{},"encounter":{"beginningDateOfService":"20261340"}}',
+     '{"subscriber":{},"encounter":{"beginningDateOfService":20260901}}',
+     '{"subscriber":{},"encounter":{"beginningDateOfService":null}}', '{"subscriber":{},"encounter":{}}'].each do |body|
+      it "raises UnreadableBody WHEN the body is #{body}: not JSON, or not a discovery request" do
+        source, = stedi_answering(archive: archive)
 
-      bodies.each do |body|
         expect { source.archived_question(file(body)) }.to raise_error(EdiGem::UnreadableBody)
       end
     end

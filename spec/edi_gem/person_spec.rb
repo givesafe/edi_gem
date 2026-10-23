@@ -116,11 +116,16 @@ RSpec.describe EdiGem::Person do
       end
     end
 
-    it "is read from each person of a discovery's answer, whole or masked" do
+    # Stedi's discovery answer, with the subscriber's SSN whole and a dependent's masked.
+    def answer_with_ssns
       body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_discovery_complete.json")))
       body["items"][0]["subscriber"]["ssn"] = "000001234"
       body["items"][0]["dependent"] = { "firstName" => "TESTKID", "ssn" => "XXX-XX-4321" }
-      source, = stedi_answering(canned_body(body))
+      canned_body(body)
+    end
+
+    it "is read from each person of a discovery's answer, whole or masked" do
+      source, = stedi_answering(answer_with_ssns)
       asked = EdiGem::Subscriber.new(first_name: "A", last_name: "B", date_of_birth: "19800101")
       clinic = EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic")
       inquiry = EdiGem::Inquiry::Discovery.new(subscriber: asked, provider: clinic, as_of: "20260901")
