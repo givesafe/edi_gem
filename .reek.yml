@@ -31,11 +31,6 @@ detectors:
   LongParameterList:
     enabled: false
 
-  # Private helpers that compute from their arguments are a class's private steps (99 Bottles'
-  # flocking rules leave them). A public method that uses no state is still a question.
-  UtilityFunction:
-    public_methods_only: true
-
   # An absence the domain keeps distinct: no archive, no identification, a payer missing from the
   # directory, a person the payer didn't return. A Null Object is the answer when one absence is
   # checked in more than one place; review catches that, reek doesn't.
