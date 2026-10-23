@@ -255,8 +255,8 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   `provider`, optional `credential`. `idempotency_key` replaces the one the gem derives from the
   body. `archive:` is nil, or `{ name: "stem" }` plus a value for each placeholder the template
   leaves to the caller.
-- **Outcome.** A settled `Response` (never `pending`). Read it with `identify`, `checked_plan`,
-  `verdict` and `verdict_code`.
+- **Outcome.** A settled `Response` (never `pending`). Read it with `identify` and
+  `checked_plan`, whose `verdict` and `verdict_code` are the check's.
 - **Effects.** One billed POST to Stedi. With `archive:`, the request body (credential fields
   redacted) and the response body are written under feature `eligibility_check`, and
   `response.stored` says where.
@@ -355,12 +355,14 @@ response.error_code        # => nil
 
 - `identify(asked, as_dependent: false)`: an `Identification` for a check's people. `asked` is a
   hash of `first_name`, `last_name` and `date_of_birth`.
-- `checked_plan(identification:)`: the check's plan, as a `CheckedPlan`.
-- `verdict(on:, identification:)`: a verdict name for a check on the day `on`.
-- `verdict_code(on:, identification:)`: the EB01 code behind that verdict, or nil.
+- `checked_plan(identification:)`: the check's plan, as a `CheckedPlan`, for the person
+  `identification` names. Its `verdict(on:)` is a verdict name for the check on the day `on`;
+  its `verdict_code(on:)` the EB01 code behind that verdict, or nil.
 - `medical_plans(asked: nil)`: a discovery's `MedicalPlan`s. `asked` is the `Person::Asked`
   each plan is compared with.
 - `discovery_verdict(on:, plans: medical_plans)`: a verdict name for a discovery.
+- `reading`: the `Verdict` for this answer's state and refusals, which reads a plan's coverage
+  (`of_plan`, `code_of`, `among`). `CheckedPlan#verdict` and `#discovery_verdict` read through it.
 
 ### Verdict names (proposed)
 
@@ -430,7 +432,8 @@ plan.identification.match            # => :matched
 | `identification` | `Identification` | who the payer answered about, compared with who was asked |
 | `lines` | Array of `AnsweredPlan::Line` | `benefit_type`, `service_types`, `insurance_type`, `plan_name`, `in_network` (nil when the payer did not say); empty when none |
 
-A `MedicalPlan` also has `payer_id` (above), `clearinghouse` (`:stedi`, or nil with no
+A `CheckedPlan` also has `verdict(on:)` and `verdict_code(on:)` (Readers, above), which weigh
+who the payer answered about. A `MedicalPlan` also has `payer_id` (above), `clearinghouse` (`:stedi`, or nil with no
 directory), `person`, `address` (the address the payer holds, or nil) and `benefits`. Dental and
 vision plans are not medical plans. A Medicaid plan another plan names as its primary payer is
 part of that plan, not a plan of its own.

@@ -4,8 +4,8 @@
 
 The caller contract for each is in the README's "V1 reference".
 
-- `Response#checked_plan`, `#medical_plans(asked:)`, `#verdict`, `#verdict_code`,
-  `#discovery_verdict` and `#error_code`; `EdiGem::CheckedPlan`, `EdiGem::MedicalPlan` (both
+- `Response#checked_plan`, `#medical_plans(asked:)`, `#discovery_verdict` and `#error_code`;
+  `CheckedPlan#verdict` and `#verdict_code`; `EdiGem::CheckedPlan`, `EdiGem::MedicalPlan` (both
   `EdiGem::AnsweredPlan`) and `EdiGem::Verdict`. A caller reads a check or a discovery in coverage
   terms and never reads a benefit line's codes itself.
 - `MedicalPlan#payer_id` and `#clearinghouse`: Stedi's payer ID for a plan's payer code, from

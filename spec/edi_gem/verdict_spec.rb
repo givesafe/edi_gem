@@ -16,8 +16,8 @@ RSpec.describe EdiGem::Verdict do
     EdiGem::Response.new(benefits: benefits, rejections: rejections, **options)
   end
 
-  describe "Response#verdict, a check's" do
-    let(:verdict) { answer.verdict(on: today, identification: answer.identify(asked)) }
+  describe "CheckedPlan#verdict, a check's" do
+    let(:verdict) { answer.checked_plan(identification: answer.identify(asked)).verdict(on: today) }
 
     {
       "complete with an active benefit" => [{ benefits: [:active] }, :active],
@@ -29,7 +29,7 @@ RSpec.describe EdiGem::Verdict do
       it "is #{expected} for #{said}" do
         answer = response(benefits: parts[:benefits].map { |status| benefit(status) })
 
-        expect(answer.verdict(on: today, identification: answer.identify(asked))).to eq(expected)
+        expect(answer.checked_plan(identification: answer.identify(asked)).verdict(on: today)).to eq(expected)
       end
     end
 
@@ -90,7 +90,7 @@ RSpec.describe EdiGem::Verdict do
       end
 
       it "is unanswered with no identification given, by the payer's refusal alone" do
-        expect(answer.verdict(on: today)).to eq(:unanswered)
+        expect(answer.checked_plan.verdict(on: today)).to eq(:unanswered)
       end
     end
 
@@ -110,7 +110,7 @@ RSpec.describe EdiGem::Verdict do
       it("is unanswered, never that person's active coverage") { expect(verdict).to eq(:unanswered) }
 
       it "is that coverage when no identification is given, since nobody was compared" do
-        expect(answer.verdict(on: today)).to eq(:active)
+        expect(answer.checked_plan.verdict(on: today)).to eq(:active)
       end
     end
 
@@ -143,33 +143,32 @@ RSpec.describe EdiGem::Verdict do
     end
 
     it "is one of the verdict names" do
-      expect(described_class::NAMES).to include(response.verdict(on: today))
+      expect(described_class::NAMES).to include(response.checked_plan.verdict(on: today))
     end
   end
 
-  describe "Response#verdict_code" do
+  describe "CheckedPlan#verdict_code" do
     let(:line) { benefit(:active, status_code: "1") }
 
     it "is the code of the line that decided an answered check" do
       answer = response(benefits: [line])
 
-      expect(answer.verdict_code(on: today, identification: answer.identify(asked))).to eq("1")
+      expect(answer.checked_plan(identification: answer.identify(asked)).verdict_code(on: today)).to eq("1")
     end
 
     it "is nil WHEN the state decided, though status lines came with it" do
       answer = response(benefits: [line], rejections: [rejection(:subscriber)])
 
-      identification = answer.identify(asked)
+      plan = answer.checked_plan(identification: answer.identify(asked))
 
-      expect([answer.verdict(on: today, identification: identification),
-              answer.verdict_code(on: today, identification: identification)]).to eq([:not_covered, nil])
+      expect([plan.verdict(on: today), plan.verdict_code(on: today)]).to eq([:not_covered, nil])
     end
 
     it "is nil WHEN the answer is about someone else" do
       someone = EdiGem::Person.new(role: :subscriber, first_name: "C", last_name: "B", date_of_birth: "19820505")
       answer = response(benefits: [line], people: [someone])
 
-      expect(answer.verdict_code(on: today, identification: answer.identify(asked))).to be_nil
+      expect(answer.checked_plan(identification: answer.identify(asked)).verdict_code(on: today)).to be_nil
     end
   end
 
