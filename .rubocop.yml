@@ -1,3 +1,8 @@
+inherit_from: .rubocop_todo.yml
+
+plugins:
+  - rubocop-rspec
+
 AllCops:
   TargetRubyVersion: 3.1
   NewCops: enable
@@ -37,3 +42,41 @@ Metrics/PerceivedComplexity:
 # `error` rather than `e`, which reek would flag.
 Naming/RescuedExceptionsVariableName:
   PreferredName: error
+
+# RSpec. Each setting below names the convention it yields to and its measure (2026-10-23, 59 spec
+# files, 1261 examples).
+
+# Measured: `to_not` 78, `not_to` 10. Plurality wins, as in the backend's .rubocop_base.yml.
+RSpec/NotToNot:
+  EnforcedStyle: to_not
+
+# Measured: 48 of 50 contexts open with "WHEN", the rest with "when". The cop's own docs ask for the
+# list to be tailored; the backend allows the same casings.
+RSpec/ContextWording:
+  Prefixes:
+    - WHEN
+    - when
+    - with
+    - without
+
+# The size cops sit at about p75 of the measured violator distribution, the backend's method.
+# A reading checks more than one field of one answer; where they are one fact, the specs already compare
+# them as one array, and :aggregate_failures (which the cop ignores) is the other accepted form.
+# Violators p50=2 p75=2 p90=3 max=5.
+RSpec/MultipleExpectations:
+  Max: 2
+
+# A source is built from a provider, a subscriber, an inquiry and canned answers, each a `let` a
+# nested context overrides. Violators p50=7 p75=8 p90=8 max=11.
+RSpec/MultipleMemoizedHelpers:
+  Max: 8
+
+# Examples build a canned source, ask it, and read the answer. Violators p50=7 p75=8 p90=9 max=10.
+RSpec/ExampleLength:
+  Max: 8
+
+# Scenario specs describe a behavior in words: a user story, or a feature reached through a source's
+# public messages, whose classes are private collaborators. 9 of 59 files, none with a constant to
+# name. The cop exempts Rails' typed specs for the same reason; the gem has no type metadata.
+RSpec/DescribeClass:
+  Enabled: false

@@ -98,6 +98,10 @@ RSpec.describe EdiGem::RequestKey do
     let(:patient) do
       EdiGem::Subscriber.new(member_id: "ABC123", first_name: "José", last_name: "Van  Doe", date_of_birth: "19800101")
     end
+    let(:addressed) do
+      EdiGem::Subscriber.new(first_name: "José", last_name: "Van  Doe", date_of_birth: "19800101",
+                             address: EdiGem::Address.new(line1: "1 Example St", postal_code: "40000"))
+    end
 
     def check(**people)
       EdiGem::Inquiry::Eligibility.new(payer_code: "99999", provider: provider, subscriber: patient, **people)
@@ -111,11 +115,6 @@ RSpec.describe EdiGem::RequestKey do
 
     def discovery(subscriber = patient)
       EdiGem::Inquiry::Discovery.new(subscriber: subscriber, provider: provider, as_of: day)
-    end
-
-    let(:addressed) do
-      EdiGem::Subscriber.new(first_name: "José", last_name: "Van  Doe", date_of_birth: "19800101",
-                             address: EdiGem::Address.new(line1: "1 Example St", postal_code: "40000"))
     end
 
     it "gives a check asked as the subscriber the key the app gave it" do

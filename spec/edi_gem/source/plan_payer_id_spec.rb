@@ -14,6 +14,18 @@ RSpec.describe "A discovered plan's payer ID" do
                                              "displayName" => "EXAMPLE PAYER", "aliases" => ["77027"] } }] })
   end
 
+  # The first search fails as a transport would fail it, the second is answered.
+  let(:failing_once) do
+    Class.new(CannedSource::Transport) do
+      def perform(path:)
+        return super unless @paths.empty?
+
+        @paths << path
+        raise EdiGem::Fault.new(kind: :timeout, source: :stedi, path: path)
+      end
+    end
+  end
+
   it "is the directory's payer ID for the plan's payer code" do
     source, = stedi_answering(canned("stedi_discovery_complete"), directory_answer)
     plan = source.discovery(inquiry).medical_plans.fetch(0)
@@ -55,19 +67,9 @@ RSpec.describe "A discovered plan's payer ID" do
     expect([first, second, transport.paths.size]).to eq(["99999", "99999", 3])
   end
 
-  # The first search fails as a transport would fail it, the second is answered.
-  let(:failing_once) do
-    Class.new(CannedSource::Transport) do
-      def perform(path:)
-        return super unless @paths.empty?
-
-        @paths << path
-        raise EdiGem::Fault.new(kind: :timeout, source: :stedi, path: path)
-      end
-    end
-  end
-
+  # rubocop:todo RSpec/MultipleExpectations -- over the gem's limit; whether to split it or raise the limit is Danny's call
   it "raises a failed search, remembers nothing, and searches again when asked again" do
+    # rubocop:enable RSpec/MultipleExpectations
     transport = failing_once.new([directory_answer])
     source = EdiGem::Source::Stedi.new(api_key: "test_key", transport: transport, archive: nil)
 
@@ -76,11 +78,15 @@ RSpec.describe "A discovered plan's payer ID" do
   end
 
   describe "an answer read again from the archive" do
+    # The directory lives only inside mktmpdir's block, which the around hook wraps the example in;
+    # a `let` cannot reach a block's argument, so the example reads it from an instance variable.
+    # rubocop:disable RSpec/InstanceVariable
     around do |example|
       Dir.mktmpdir("edi-archive") { |dir| @root = dir and example.run }
     end
 
     let(:archive) { EdiGem::Archive::Local.new(template: "#{@root}/$FEATURE/$DIRECTION") }
+    # rubocop:enable RSpec/InstanceVariable
 
     it "asks the directory nothing for its addresses" do
       source, transport = stedi_answering(canned("stedi_discovery_complete"), archive: archive)

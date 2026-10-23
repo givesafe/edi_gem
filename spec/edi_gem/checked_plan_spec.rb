@@ -103,7 +103,9 @@ RSpec.describe EdiGem::CheckedPlan do
     end
   end
 
+  # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
   describe "an answer read from Stedi" do
+    # rubocop:enable RSpec/MultipleMemoizedHelpers
     let(:provider) { EdiGem::Provider.new(npi: "1999999984", organization_name: "EXAMPLECLINIC") }
     let(:subscriber) { EdiGem::Subscriber.new(member_id: "MOCK00000001", last_name: "Testlast") }
     let(:answer) do
@@ -140,7 +142,9 @@ RSpec.describe EdiGem::CheckedPlan do
     end
 
     PlanDateForms::ALL.each do |form, (dates, expected)|
+      # rubocop:todo RSpec/ExampleLength -- over the gem's limit; whether to split it or raise the limit is Danny's call
       it "are read from a check's planDateInformation WHEN it holds #{form}" do
+        # rubocop:enable RSpec/ExampleLength
         body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_271_active_coverage.json")))
         body["planDateInformation"] = dates
         source, = stedi_answering(canned_body(body))

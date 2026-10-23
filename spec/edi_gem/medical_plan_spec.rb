@@ -132,7 +132,9 @@ RSpec.describe EdiGem::MedicalPlan do
       end
     end
 
+    # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
     context "WHEN an MCO's plan names a Medicaid payer that came back as its own plan" do
+      # rubocop:enable RSpec/MultipleMemoizedHelpers
       let(:mco_line) { line.merge(primary_payer_code: "MCAID9") }
       let(:medicaid_line) { { member_id: "MEDID0002", payer_code: "MCAID9", status: :active } }
       let(:found) { [found_plan([mco_line], held), found_plan([medicaid_line], held)] }
@@ -313,7 +315,9 @@ RSpec.describe EdiGem::MedicalPlan do
     end
   end
 
+  # rubocop:todo RSpec/MultipleMemoizedHelpers -- over the gem's limit; whether to split it or raise the limit is Danny's call
   describe "the details given beside the core" do
+    # rubocop:enable RSpec/MultipleMemoizedHelpers
     let(:address) { EdiGem::Address.new(line1: "1 Example St", postal_code: "40000") }
     let(:asked_about) { EdiGem::Person::Asked.new(**asked, address: address, ssn: "000-00-1234") }
     let(:held) do
