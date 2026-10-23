@@ -9,6 +9,37 @@ module EdiGem
         CREDENTIAL_FIELDS = { portal_password: :portalPassword,
                               portal_username: :portalUsername }.freeze
 
+        # The question a discovery body (#discovery, parsed) asked, as an Inquiry::Question: the
+        # subscriber's names as they were sent (Identity.plain), birth date, address and SSN, of
+        # which the person keeps the last four only, and the first day of service. A birth date
+        # that is not a YYYYMMDD string naming a real day (a number included) is nil. Raises
+        # UnreadableBody when the body holds no subscriber, or no day of service as such a string,
+        # since it is then not a discovery request.
+        def self.question(body)
+          subscriber = body["subscriber"] if body.is_a?(Hash)
+          encounter = body["encounter"] if subscriber.is_a?(Hash)
+          on = encounter["beginningDateOfService"] if encounter.is_a?(Hash)
+          raise UnreadableBody, "the body is not a discovery request" unless on.is_a?(String) && on.match?(Codec::DAY)
+
+          Inquiry::Question.new(person: asked_person(subscriber), as_of: Date.strptime(on, "%Y%m%d"))
+        rescue Date::Error
+          raise UnreadableBody, "the body's day of service is not a date"
+        end
+
+        def self.asked_person(subscriber)
+          Person::Asked.new(first_name: subscriber["firstName"], last_name: subscriber["lastName"],
+                            date_of_birth: born_on(subscriber["dateOfBirth"]),
+                            address: Address.from_stedi(subscriber["address"]), ssn: subscriber["ssn"])
+        end
+        private_class_method :asked_person
+
+        def self.born_on(day)
+          Date.strptime(day, "%Y%m%d") if day.is_a?(String) && day.match?(Codec::DAY)
+        rescue Date::Error
+          nil
+        end
+        private_class_method :born_on
+
         # `policy` says what the payer needs through Stedi; the inquiry may name more.
         def initialize(inquiry, policy:, payer_code: nil, credential: nil)
           @inquiry = inquiry

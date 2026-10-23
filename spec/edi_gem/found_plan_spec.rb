@@ -46,6 +46,40 @@ RSpec.describe EdiGem::FoundPlan do
     expect(plan([holder]).coverage_on("20260901")).to be_active
   end
 
+  describe "#medical?" do
+    def medical?(*service_types)
+      lines = service_types.map { |types| EdiGem::Benefit.new(status: :active, service_types: types) }
+      described_class.new(benefits: lines, people: []).medical?
+    end
+
+    it "is false WHEN every line is dental or vision" do
+      expect([medical?(%w[35], %w[AL]), medical?(%w[23 28 41 AO])]).to eq([false, false])
+    end
+
+    it "is true WHEN a line covers medical care beside dental" do
+      expect(medical?(%w[35 30])).to be(true)
+    end
+
+    it "is true WHEN no line names a service type" do
+      expect([medical?(nil), medical?([])]).to eq([true, true])
+    end
+  end
+
+  describe "#names_as_primary_payer?" do
+    def found(**fields) = described_class.new(benefits: [EdiGem::Benefit.new(fields)], people: [])
+
+    it "is true WHEN the plan names the other plan's payer as its primary payer" do
+      expect(found(primary_payer_code: "MCAID9").names_as_primary_payer?(found(payer_code: "MCAID9"))).to be(true)
+    end
+
+    it "is false WHEN it names another payer, or none" do
+      medicaid = found(payer_code: "MCAID9")
+
+      expect([found(primary_payer_code: "OTHER"), found(primary_payer_code: " "), found]
+               .map { |plan| plan.names_as_primary_payer?(medicaid) }).to eq([false, false, false])
+    end
+  end
+
   it "prints its size and roles, never a person" do
     expect(plan([holder, patient]).inspect).to eq("#<EdiGem::FoundPlan benefits=2 people=subscriber,dependent>")
   end

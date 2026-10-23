@@ -30,7 +30,7 @@ RSpec.describe EdiGem::Source, ".for" do
   end
 
   it "lists the names it accepts" do
-    expect(described_class.names).to eq(%i[stedi office_ally optum])
+    expect(described_class.names).to eq(%i[stedi office_ally optum mock])
   end
 
   it "keys every source by the NAME the source itself declares" do
@@ -41,7 +41,7 @@ RSpec.describe EdiGem::Source, ".for" do
 
   it "raises for a name nothing is registered under, and lists the ones that are" do
     expect { described_class.for(:availity) }
-      .to raise_error(EdiGem::UnknownSource, /availity.*stedi, office_ally, optum/)
+      .to raise_error(EdiGem::UnknownSource, /availity.*stedi, office_ally, optum, mock/)
   end
 
   it "does not take a missing name for a source" do

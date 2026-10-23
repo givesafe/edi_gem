@@ -30,6 +30,24 @@ module EdiGem
     def payer_code = self[:payer_code]
     def member_id = self[:member_id]
 
+    # X12 service type codes for dental (23-28, 35-41) and vision (AL-AO).
+    DENTAL_OR_VISION_SERVICE_TYPES = (%w[23 24 25 26 27 28] + ("35".."41").to_a + %w[AL AM AN AO]).freeze
+
+    # Whether the plan covers medical care: a line names a service type other than dental or
+    # vision. Lines that name no service type say nothing either way, so a plan of only those is
+    # medical.
+    def medical?
+      service_types = @benefits.flat_map { |benefit| Array(benefit.service_types) }
+      service_types.empty? || (service_types - DENTAL_OR_VISION_SERVICE_TYPES).any?
+    end
+
+    # Whether this plan names `other`'s payer as its primary payer, as an MCO's plan names the
+    # state Medicaid plan it manages.
+    def names_as_primary_payer?(other)
+      code = self[:primary_payer_code]
+      !code.to_s.strip.empty? && code == other.payer_code
+    end
+
     def subscriber_person
       @people.find { |person| !person.dependent? }
     end

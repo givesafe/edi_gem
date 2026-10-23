@@ -89,6 +89,24 @@ RSpec.describe EdiGem::Archive::S3 do
         .to raise_error(EdiGem::ArchiveFailed, %r{s3://warehouse/raw/stedi/.* could not be reached \(Net::ReadTimeout\)})
     end
 
+    it "says a refused write will not pass by asking again" do
+      allow(client).to receive(:request).and_return(Net::HTTPForbidden.new("1.1", "403", "no"))
+
+      expect { stored }.to raise_error(EdiGem::ArchiveFailed) { |failed| expect(failed).to_not be_retryable }
+    end
+
+    it "says a write S3 answered with Slow Down may pass later" do
+      allow(client).to receive(:request).and_return(Net::HTTPServiceUnavailable.new("1.1", "503", "Slow Down"))
+
+      expect { stored }.to raise_error(EdiGem::ArchiveFailed) { |failed| expect(failed).to be_retryable }
+    end
+
+    it "says a write that never reached the bucket may pass later" do
+      allow(client).to receive(:request).and_raise(Net::ReadTimeout)
+
+      expect { stored }.to raise_error(EdiGem::ArchiveFailed) { |failed| expect(failed).to be_retryable }
+    end
+
     def key_of(uri) = uri.delete_prefix("s3://warehouse/")
   end
 
@@ -109,8 +127,52 @@ RSpec.describe EdiGem::Archive::S3 do
       expect { archive.fetch(uri) }.to raise_error(EdiGem::ArchiveFailed, /answered 404/)
     end
 
-    it "refuses an object in another bucket, sending nothing" do
-      expect { archive.fetch("s3://elsewhere/raw/x.json") }.to raise_error(ArgumentError, %r{not in s3://warehouse})
+    # AWS's retry guidance: 500, 502, 503 and 504 are transient, 503 SlowDown and 429 throttling.
+    { "500" => true, "502" => true, "503" => true, "504" => true, "429" => true,
+      "404" => false, "403" => false, "400" => false }.each do |status, retryable|
+      it "says whether a read answered #{status} may pass later (#{retryable})" do
+        answer = Net::HTTPResponse::CODE_TO_OBJ.fetch(status).new("1.1", status, "x")
+        allow(client).to receive(:request).and_return(answer)
+
+        expect { archive.fetch(uri) }
+          .to raise_error(EdiGem::ArchiveFailed, /answered #{status}/) { |failed| expect(failed.retryable?).to eq(retryable) }
+      end
+    end
+
+    # One per family S3#reach calls a network failure; TLS is retried by choice, see NETWORK_ERRORS.
+    [Net::OpenTimeout, Net::ReadTimeout, Timeout::Error, SocketError, Errno::ECONNRESET,
+     Errno::ECONNREFUSED, Errno::EHOSTUNREACH, Errno::ETIMEDOUT, Errno::EPIPE, IOError, EOFError,
+     OpenSSL::SSL::SSLError].each do |kind|
+      it "says a read that failed on the network with #{kind} may pass later" do
+        allow(client).to receive(:request).and_raise(kind)
+
+        expect { archive.fetch(uri) }
+          .to raise_error(EdiGem::ArchiveFailed, /could not be reached \(#{kind}\)/) { |failed| expect(failed).to be_retryable }
+      end
+    end
+
+    [Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError].each do |kind|
+      it "says a read whose answer was not readable HTTP (#{kind}) will not pass by asking again" do
+        allow(client).to receive(:request).and_raise(kind)
+
+        expect { archive.fetch(uri) }
+          .to raise_error(EdiGem::ArchiveFailed, /no readable HTTP \(#{kind}\)/) { |failed| expect(failed).to_not be_retryable }
+      end
+    end
+
+    # A defect in the call is not an archive failure: it reaches the caller's own error path rather
+    # than reading as a missing body.
+    [TypeError, NoMethodError, ArgumentError].each do |kind|
+      it "lets #{kind} from the client through as itself, not as ArchiveFailed" do
+        allow(client).to receive(:request).and_raise(kind)
+
+        expect { archive.fetch(uri) }.to raise_error(kind) { |raised| expect(raised).to_not be_a(EdiGem::ArchiveFailed) }
+      end
+    end
+
+    it "refuses an object in another bucket, sending nothing, as a failure asking again will not change" do
+      expect { archive.fetch("s3://elsewhere/raw/x.json") }
+        .to raise_error(EdiGem::ArchiveFailed, %r{not in s3://warehouse}) { |failed| expect(failed).to_not be_retryable }
       expect(sent).to be_empty
     end
   end

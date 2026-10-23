@@ -76,6 +76,14 @@ RSpec.describe EdiGem::Source::Connection do
 
       expect(request["Idempotency-Key"]).to be_nil
     end
+
+    it "sends a GET's query on the URL" do
+      connection.get(:payer_search, "/2024-04-01/payers/search", query: { query: "99999", pageSize: 100 })
+      request = nil
+      expect(client).to have_received(:request) { |sent| request = sent }
+
+      expect(request.uri.to_s).to eq("https://healthcare.us.stedi.com/2024-04-01/payers/search?query=99999&pageSize=100")
+    end
   end
 
   # One transport per operation, held for the life of the connection: the throttle it paces

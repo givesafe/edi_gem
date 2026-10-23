@@ -162,6 +162,27 @@ RSpec.describe "batching through Stedi" do
       expect(source.batch_status("01JB7Q2F3K8N4X5Y6Z7A8B9C0E")).to be_finished
     end
 
+    it "reads a batch still being worked as in progress" do
+      expect(status.progress).to eq(:in_progress)
+    end
+
+    it "reads a batch that failed validation as such, so no answers are read for it" do
+      source, = stedi_answering(canned("stedi_batch_status_validation_failed"))
+
+      expect(source.batch_status("01JB7Q2F3K8N4X5Y6Z7A8B9C0E").progress).to eq(:validation_failed)
+    end
+
+    it "reads each finished status as its own symbol, and is finished for each" do
+      statuses = %w[COMPLETED COMPLETED_WITH_ERRORS].map { |state| EdiGem::Batch::Status.new(state: state) }
+
+      expect(statuses.map { |done| [done.progress, done.finished?] })
+        .to eq([[:completed, true], [:completed_with_errors, true]])
+    end
+
+    it "reads a status it does not know as still in progress, never as finished" do
+      expect(EdiGem::Batch::Status.new(state: "QUEUED").progress).to eq(:in_progress)
+    end
+
     it "asks for the batch by id" do
       source, transport = stedi_answering(canned("stedi_batch_status_in_progress"))
       source.batch_status("01JB7Q2F3K8N4X5Y6Z7A8B9C0D")
@@ -194,6 +215,13 @@ RSpec.describe "batching through Stedi" do
 
     it "reports only the finished checks as settled" do
       expect(page.items.map(&:settled?)).to eq([true, true, false])
+    end
+
+    it "reports only a check finished without error as completed" do
+      states = %w[COMPLETED COMPLETED_WITH_ERRORS VALIDATION_FAILED RETRYING]
+
+      expect(states.map { |state| EdiGem::Batch::Check.new({ "state" => state }).completed? })
+        .to eq([true, false, false, false])
     end
 
     it "reports only an ACTIVE result as active" do

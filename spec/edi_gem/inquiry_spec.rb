@@ -93,6 +93,33 @@ RSpec.describe EdiGem::Inquiry::Discovery do
 
     expect(inquiry.service_date).to eq("20260901")
   end
+
+  describe "#question" do
+    let(:address) { EdiGem::Address.new(line1: "1 Example St", postal_code: "40000") }
+
+    def question(**fields)
+      given = EdiGem::Subscriber.new(first_name: "José", last_name: "Núñez", date_of_birth: "19800102", **fields)
+      described_class.new(subscriber: given, provider: provider, as_of: Date.new(2026, 9, 1)).question
+    end
+
+    it "is who was asked about, as given, and the day as a Date" do
+      expect([question.person.to_h, question.as_of])
+        .to eq([{ first_name: "José", last_name: "Núñez", date_of_birth: Date.new(1980, 1, 2) }, Date.new(2026, 9, 1)])
+    end
+
+    it "carries the address and the SSN's last four given" do
+      held = EdiGem::Person.new(role: :subscriber, address_line1: "1 EXAMPLE ST", postal_code: "40000",
+                                ssn: "XXX-XX-1234")
+
+      expect(question(address: address, ssn: "000001234").person.given_fields(held))
+        .to eq(address: :matched, ssn_last_four: :matched)
+    end
+
+    it "carries neither WHEN neither was given, and equals today's asked person" do
+      expect(question.person).to eq(EdiGem::Person::Asked.new(first_name: "José", last_name: "Núñez",
+                                                              date_of_birth: Date.new(1980, 1, 2)))
+    end
+  end
 end
 
 RSpec.describe "EdiGem::Inquiry::Eligibility#service_date" do

@@ -55,8 +55,17 @@ module EdiGem
         FIELDS.each_key { |field| instance_variable_set(:"@#{field}", fields[field]) }
       end
 
+      # Where a batch has got to, by Stedi's status. Any status not finished is still in progress:
+      # Stedi keeps retrying a silent payer for hours.
+      PROGRESS = { "COMPLETED" => :completed, "COMPLETED_WITH_ERRORS" => :completed_with_errors,
+                   "VALIDATION_FAILED" => :validation_failed }.freeze
+
       # Whether the checks are worth reading yet.
       def finished? = FINISHED.include?(@state)
+
+      # `state` as a symbol, so a caller never reads Stedi's strings: :in_progress, :completed,
+      # :completed_with_errors, or :validation_failed (no payer was asked, so no answers to read).
+      def progress = PROGRESS.fetch(@state, :in_progress)
     end
 
     # One page of a batch's checks. A nil `next_page_token` is the only sign the listing is
@@ -135,6 +144,10 @@ module EdiGem
       def member_id = eligibility["subscriberMemberId"]
 
       def settled? = DONE.include?(state)
+
+      # The source finished asking without error. A completed check with no answer in it is the
+      # source's doing, not the payer's.
+      def completed? = state == DONE.first
 
       def active? = result == ACTIVE
 

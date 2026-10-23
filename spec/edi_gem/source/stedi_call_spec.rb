@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "pp"
+require "tmpdir"
+
 # The public calls, end to end against canned responses written from Stedi's documentation.
 RSpec.describe "calling Stedi" do
   let(:provider) { EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic") }
@@ -373,6 +376,182 @@ RSpec.describe "calling Stedi" do
       source, = stedi_answering
 
       expect { source.archived_discovery("file:///kept.json") }.to raise_error(EdiGem::ArchiveNotConfigured)
+    end
+
+    it "is read by the common name too, its medical plans with the address the payer holds" do
+      source, = stedi_answering(canned("stedi_discovery_complete"), archive: archive)
+      kept = source.discovery(discovery_inquiry, archive: { name: "discovery-1" })
+
+      plans = source.archived(kept.stored.response_uri).medical_plans
+
+      expect(plans.map { |plan| [plan.member_id, plan.address.to_h] })
+        .to eq([["MOCK00000002", { line1: "123 Example St", line2: "Apt 4", city: "Testville", state: "ZZ",
+                                   postal_code: "00000" }]])
+    end
+
+    it "raises ArchiveFailed when the kept answer is missing" do
+      source, = stedi_answering(archive: archive)
+
+      expect { source.archived("file://#{@root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
+    end
+  end
+
+  # A discovery collected later is compared with the question sent, never with the caller's record
+  # as it stands then. Every value is made up.
+  describe "#archived_question" do
+    around do |example|
+      Dir.mktmpdir("edi-archive") { |dir| @root = dir and example.run }
+    end
+
+    let(:archive) { EdiGem::Archive::Local.new(template: "#{@root}/$FEATURE/$DIRECTION") }
+    let(:address) { EdiGem::Address.new(line1: "1 Example St", city: "Example", postal_code: "40000") }
+    let(:given) do
+      EdiGem::Subscriber.new(first_name: "José", last_name: "Núñez", date_of_birth: "19800102", ssn: "000001234",
+                             address: address)
+    end
+
+    def kept_request(subscriber = given)
+      source, = stedi_answering(canned("stedi_discovery_pending"), archive: archive)
+      inquiry = EdiGem::Inquiry::Discovery.new(subscriber: subscriber, provider: provider, as_of: Date.new(2026, 9, 1))
+      [source, source.discovery(inquiry, archive: { name: "discovery-1" }).stored.request_uri]
+    end
+
+    def file(body)
+      path = File.join(@root, "request.json")
+      File.write(path, body)
+      "file://#{path}"
+    end
+
+    it "recovers who was asked about, as sent, and the day, and sends nothing more" do
+      source, uri = kept_request
+      question = source.archived_question(uri)
+
+      expect([question.person.to_h, question.person.address.to_h, question.as_of])
+        .to eq([{ first_name: "JOSE", last_name: "NUNEZ", date_of_birth: Date.new(1980, 1, 2) },
+                { line1: "1 Example St", city: "Example", postal_code: "40000" }, Date.new(2026, 9, 1)])
+    end
+
+    it "keeps the last four of the SSN sent, comparing as the question it came from" do
+      source, uri = kept_request
+      held = EdiGem::Person.new(role: :subscriber, address_line1: "1 EXAMPLE ST", postal_code: "40000",
+                                ssn: "XXX-XX-1234")
+
+      expect(source.archived_question(uri).person.given_fields(held)).to eq(address: :matched, ssn_last_four: :matched)
+    end
+
+    it "prints no digit of the SSN, revealed or not" do
+      source, uri = kept_request
+      person = source.archived_question(uri).person
+      printed = [false, true].map do |revealed|
+        EdiGem.reveal = revealed
+        [person.inspect, PP.pp(person, +"")].join
+      ensure
+        EdiGem.reveal = false
+      end
+
+      expect(printed.join).to_not include("1234")
+    end
+
+    it "carries neither given detail WHEN the request carried neither, and a birth date that isn't a day as nil" do
+      source, = stedi_answering(archive: archive)
+      body = { subscriber: { firstName: "A", lastName: "B", dateOfBirth: "19801340" },
+               encounter: { beginningDateOfService: "20260901" } }
+      person = source.archived_question(file(JSON.generate(body))).person
+
+      expect([person.date_of_birth, person.address, person.given_fields(nil)]).to eq([nil, nil, {}])
+    end
+
+    it "carries a nil birth date WHEN the request's is a number, null, or a string that isn't a day" do
+      source, = stedi_answering(archive: archive)
+
+      born = [19_800_101, nil, "1980-01-01", "19801340"].map do |day|
+        body = { subscriber: { firstName: "A", lastName: "B", dateOfBirth: day },
+                 encounter: { beginningDateOfService: "20260901" } }
+        source.archived_question(file(JSON.generate(body))).person.date_of_birth
+      end
+
+      expect(born).to eq([nil, nil, nil, nil])
+    end
+
+    it "refuses WHEN no archive is configured" do
+      source, = stedi_answering
+
+      expect { source.archived_question("file:///kept.json") }.to raise_error(EdiGem::ArchiveNotConfigured)
+    end
+
+    it "raises ArchiveFailed WHEN the kept request is missing" do
+      source, = stedi_answering(archive: archive)
+
+      expect { source.archived_question("file://#{@root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
+    end
+
+    it "refuses a uri the archive did not make, nil included" do
+      source, = stedi_answering(archive: archive)
+
+      expect { source.archived_question(nil) }
+        .to raise_error(EdiGem::ArchiveFailed) { |failed| expect(failed).to_not be_retryable }
+    end
+
+    it "raises UnreadableBody WHEN the body is not JSON, or not a discovery request" do
+      source, = stedi_answering(archive: archive)
+      bodies = ["<html>", "[]", '{"subscriber":"A"}', '{"subscriber":{}}', '{"subscriber":{},"encounter":"x"}',
+                '{"subscriber":{},"encounter":{"beginningDateOfService":"2026"}}',
+                '{"subscriber":{},"encounter":{"beginningDateOfService":"20261340"}}',
+                '{"subscriber":{},"encounter":{"beginningDateOfService":20260901}}',
+                '{"subscriber":{},"encounter":{"beginningDateOfService":null}}', '{"subscriber":{},"encounter":{}}']
+
+      bodies.each do |body|
+        expect { source.archived_question(file(body)) }.to raise_error(EdiGem::UnreadableBody)
+      end
+    end
+  end
+
+  # A discovery poll reads the kept question and answer back, and asks again only when another read
+  # may help: `retryable?` on the ArchiveFailed says which, the same from either archive.
+  describe "reading a kept discovery back when the archive fails" do
+    around do |example|
+      Dir.mktmpdir("edi-archive") { |dir| @root = dir and example.run }
+    end
+
+    let(:local) { EdiGem::Archive::Local.new(template: "#{@root}/$FEATURE/$DIRECTION") }
+    let(:client) { instance_double(Net::HTTP) }
+    let(:s3) do
+      EdiGem::Archive::S3.new(template: "s3://warehouse/edi/$FEATURE/$DIRECTION", region: "us-east-1",
+                              access_key_id: "AKIA", secret_access_key: "secret", client: client)
+    end
+    let(:s3_uri) { "s3://warehouse/edi/discovery/response/discovery-1_20260901T000000000Z.json" }
+
+    def failure(archive, uri, read)
+      source, = stedi_answering(archive: archive)
+      source.public_send(read, uri)
+    rescue EdiGem::ArchiveFailed => error
+      error
+    end
+
+    %i[archived archived_question].each do |read|
+      describe "##{read}" do
+        it "is not retryable WHEN the local file is missing" do
+          expect(failure(local, "file://#{@root}/missing.json", read)).to_not be_retryable
+        end
+
+        it "is not retryable WHEN S3 has no such object" do
+          allow(client).to receive(:request).and_return(Net::HTTPNotFound.new("1.1", "404", "NoSuchKey"))
+
+          expect(failure(s3, s3_uri, read)).to_not be_retryable
+        end
+
+        it "is retryable WHEN S3 answers that it is failing" do
+          allow(client).to receive(:request).and_return(Net::HTTPServiceUnavailable.new("1.1", "503", "Slow Down"))
+
+          expect(failure(s3, s3_uri, read)).to be_retryable
+        end
+
+        it "is retryable WHEN S3 cannot be reached" do
+          allow(client).to receive(:request).and_raise(Net::OpenTimeout)
+
+          expect(failure(s3, s3_uri, read)).to be_retryable
+        end
+      end
     end
   end
 

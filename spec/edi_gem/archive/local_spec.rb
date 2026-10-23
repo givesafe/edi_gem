@@ -198,8 +198,30 @@ RSpec.describe EdiGem::Archive::Local do
       expect { archive.fetch("file://#{root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
     end
 
-    it "refuses a uri that is not a file's" do
-      expect { archive.fetch("s3://warehouse/x.json") }.to raise_error(ArgumentError)
+    it "says a missing file will not appear by asking again" do
+      expect { archive.fetch("file://#{root}/missing.json") }
+        .to raise_error(EdiGem::ArchiveFailed) { |failed| expect(failed).to_not be_retryable }
+    end
+
+    it "says a refused permission will not pass by asking again" do
+      allow(File).to receive(:binread).and_raise(Errno::EACCES)
+
+      expect { archive.fetch(stored.response_uri) }
+        .to raise_error(EdiGem::ArchiveFailed, /Errno::EACCES/) { |failed| expect(failed).to_not be_retryable }
+    end
+
+    [Errno::EAGAIN, Errno::EINTR, Errno::EBUSY, Errno::ETIMEDOUT].each do |kind|
+      it "says a read the system interrupted with #{kind} may pass later" do
+        allow(File).to receive(:binread).and_raise(kind)
+
+        expect { archive.fetch(stored.response_uri) }
+          .to raise_error(EdiGem::ArchiveFailed, /#{kind}/) { |failed| expect(failed).to be_retryable }
+      end
+    end
+
+    it "refuses a uri that is not a file's, as a failure asking again will not change" do
+      expect { archive.fetch("s3://warehouse/x.json") }
+        .to raise_error(EdiGem::ArchiveFailed, /is not a local archive's/) { |failed| expect(failed).to_not be_retryable }
     end
   end
 end

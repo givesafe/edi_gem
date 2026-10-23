@@ -51,6 +51,9 @@ module EdiGem
 
     def description = KINDS.fetch(@kind)[:description]
 
+    # A fault is recorded by its kind: timeout, vendor_error.
+    def code = @kind.to_s
+
     # The Rejection this fault stands for, so a failure can be recorded as a Response state.
     def to_rejection
       Rejection.new(level: level, code: @kind, description: description,

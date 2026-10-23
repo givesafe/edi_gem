@@ -1,5 +1,49 @@
 ## [Unreleased]
 
+### Proposed (in the working tree, not yet reviewed by Danny)
+
+The caller contract for each is in the README's "V1 reference".
+
+- `Response#checked_plan`, `#medical_plans(asked:)`, `#verdict`, `#verdict_code`,
+  `#discovery_verdict` and `#error_code`; `EdiGem::CheckedPlan`, `EdiGem::MedicalPlan` (both
+  `EdiGem::AnsweredPlan`) and `EdiGem::Verdict`. A caller reads a check or a discovery in coverage
+  terms and never reads a benefit line's codes itself.
+- `MedicalPlan#payer_id` and `#clearinghouse`: Stedi's payer ID for a plan's payer code, from
+  Stedi's payer directory (`Source::Base#payers`, `#payer_id_for`; `EdiGem::ListedPayer`). One
+  search per code for the source's lifetime; not billed.
+- `Source::Base#archived` (the common name for `archived_discovery`) and `#archived_question`,
+  which reads a kept discovery request back as an `Inquiry::Question` (`Person::Asked` and the day
+  asked about). `Inquiry::Discovery#question` builds the same from an inquiry.
+- `Identification#match`, `#matched?`, `#mismatched?`, `#fields`, `#differing`, `#reason` and
+  `#answered_as`, with the payer's refusal of the person (`EdiGem::PersonRefusal`) winning over
+  our comparison.
+- `Identification#given_fields`, `Address#compare` and `EdiGem::LastFour`: a given address and
+  the last four of an SSN are compared with what the payer holds, and never change the match.
+  `Person#ssn_last_four`, `#relationship` and `#born_on`. `Identification` is its own constant
+  (`Response::Identification` still names it).
+- `Inquiry#idempotency_key` and `#fingerprint` (`EdiGem::RequestKey`): keys made from what a
+  question asks, so the details themselves are never stored.
+- `Batch::Status#progress`, `Batch::Check#completed?`, `Error#code` and `Fault#code`.
+- `Source::Mock` (`Source.for(:mock, ...)`): Stedi with discovery answered from code, since
+  Stedi's test mode answers no discovery.
+- `EdiGem::ArchiveFailed#retryable?`: whether the same archive read or write may succeed later.
+  True for a network failure reaching an S3 bucket (timeouts, socket, connection, IO and
+  TLS errors), for an S3 bucket that answered 500, 502, 503, 504 or 429, and for a
+  local read the system interrupted; false for a missing or refused object, an S3 answer that is
+  not readable HTTP, and every other local failure. The class and its ancestry are unchanged.
+- One existing behavior changes: `Archive::S3` raises `ArchiveFailed` only for the network
+  failures above and for an answer that is not readable HTTP (`Net::HTTPBadResponse`,
+  `Net::HTTPHeaderSyntaxError`, with the message "answered with no readable HTTP"). Any other
+  exception from the HTTP client, such as a `TypeError` or `ArgumentError`, was wrapped as
+  `ArchiveFailed` and is now raised as itself, so a defect does not read as a missing body.
+- A second behavior changes: `Archive#fetch` (and so `archived`, `archived_discovery` and
+  `archived_question`) raises `ArchiveFailed`, not retryable, in place of `ArgumentError` for a uri
+  (nil included) the archive did not make: an object in another bucket, or a uri that is not a
+  local archive's. The messages are the same and nothing is sent. The uri is stored data, not a
+  defect in the call.
+
+### Reviewed
+
 - Names are sent in capitals without accents (`Identity.plain`), in Stedi bodies and in a 270.
   This changes what an existing call sends; payers differ on accents, so none are sent.
 - `Inquiry` takes `dependent:`, the patient when they are on the subscriber's policy. Stedi sends
@@ -23,7 +67,7 @@ sent when no credential is given, as an inquiry's `required_credentials` already
   payer needs. `Source::Base#required_credentials(payer_code)` and `Policy#credentials_for`
   read it. Stedi's Medi-Cal (`100065`) needs `portal_password`, its PIN.
 - `Inquiry::Eligibility` takes `credential:`, the payer's secrets for that inquiry, used in place
-  of the source's own. Each payer issues its own, so one source can check several payers, and a
+  of the source's own. Each payer issues its own, so one source can check more than one payer, and a
   batch can carry a different credential on each item.
 - `EdiGem.reveal = true` makes `inspect` and `pp` print secrets and PHI in full, for hosts with
   no real member data and no production key. Off unless set to `true`.

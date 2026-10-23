@@ -141,8 +141,12 @@ EdiGem::Schema.define(:stedi) do
     field :begins_on, from: "plan", codec: :rd8_start
     field :ends_on, from: "planEnd"
     field :ends_on, from: "plan", codec: :rd8_end
+    # The plan's own dates: its `plan` range when sent, else planBegin and planEnd. Never the
+    # eligibility period or a line's dates.
     field :plan_begins_on, from: "plan", codec: :rd8_start
+    field :plan_begins_on, from: "planBegin"
     field :plan_ends_on, from: "plan", codec: :rd8_end
+    field :plan_ends_on, from: "planEnd"
     field :eligibility_ends_on, from: "eligibilityEnd"
     field :policy_effective_on, from: "policyEffective"
     field :policy_expires_on, from: "policyExpiration"
@@ -229,6 +233,7 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :state_insurance_id, from: "planInformation.medicaidRecipientIdNumber"
 
     field :member_id, from: "subscriber.memberId"
+    field :group_number, from: "subscriber.groupNumber"
     field :payer_name, from: "payer.name"
     field :payer_code, from: "payer.payorIdentification"
     # Same date fallbacks as the eligibility schema.
@@ -237,8 +242,11 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :begins_on, from: "planDateInformation.plan", codec: :rd8_start
     field :ends_on, from: "planDateInformation.planEnd"
     field :ends_on, from: "planDateInformation.plan", codec: :rd8_end
+    # The plan's own dates, as the eligibility schema reads them.
     field :plan_begins_on, from: "planDateInformation.plan", codec: :rd8_start
+    field :plan_begins_on, from: "planDateInformation.planBegin"
     field :plan_ends_on, from: "planDateInformation.plan", codec: :rd8_end
+    field :plan_ends_on, from: "planDateInformation.planEnd"
     field :coverage_ends_on, from: "planDateInformation", codec: :span_end
     field :confidence, from: "confidence.level"
     field :confidence_reason, from: "confidence.reason"
@@ -257,6 +265,8 @@ EdiGem::Schema.define(:stedi_discovery) do
       field :relationship_code, from: "relationToSubscriberCode"
       field :maintenance_type_code, from: "maintenanceTypeCode"
       field :maintenance_reason_code, from: "maintenanceReasonCode"
+      # Payers fill it whole, masked (XXX-XX-1234) or not at all; Person keeps the last four only.
+      field :ssn, from: "ssn"
       field :address_line1, from: "address.address1"
       field :address_line2, from: "address.address2"
       field :city, from: "address.city"

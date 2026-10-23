@@ -28,8 +28,11 @@ module EdiGem
         send_request(request, operation, path)
       end
 
-      def get(operation, path)
-        send_request(Net::HTTP::Get.new(url_for(operation, path)), operation, path)
+      # `query` is sent as the URL's query string; the Transport and any Fault name only `path`.
+      def get(operation, path, query: nil)
+        url = url_for(operation, path)
+        url.query = URI.encode_www_form(query) if query
+        send_request(Net::HTTP::Get.new(url), operation, path)
       end
 
       private

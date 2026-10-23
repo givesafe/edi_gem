@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "net/http"
+require "openssl"
 require "uri"
 
 module EdiGem
@@ -9,6 +10,34 @@ module EdiGem
     # addressing, so bucket names containing a dot are refused.
     class S3 < Archive
       CREDENTIAL_VARIABLES = %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY].freeze
+
+      # The answers AWS calls transient or throttling, so ArchiveFailed#retryable? is true for them:
+      # 500, 502, 503 and 504 (503 is also S3's SlowDown) and 429. Every other answer, a missing
+      # object (404 NoSuchKey, or 403 AccessDenied without s3:ListBucket) included, is not.
+      # https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html ("Which errors
+      # are retried") and
+      # https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance-design-patterns.html
+      # (503 Slow Down). The status alone is read: the error body's code is not, so a 400
+      # RequestTimeout is not retried.
+      RETRYABLE_STATUSES = %w[429 500 502 503 504].freeze
+
+      # The failures S3#reach recognizes, each raised as ArchiveFailed. NETWORK_ERRORS are the
+      # timeouts, socket and connection errors, and IO errors Net::HTTP raises from the network (the
+      # families it retries itself in Net::HTTP#transport_request), and are retryable.
+      #
+      # OpenSSL::SSL::SSLError is retryable by choice: a generic one does not say whether it will
+      # pass, and Net::HTTP retries it for an idempotent request
+      # (https://docs.ruby-lang.org/en/master/Net/HTTP.html#method-i-max_retries-3D). That is not
+      # evidence that a TLS failure is transient; it is a cautious choice for a caller that retries
+      # within a small budget.
+      NETWORK_ERRORS = [Timeout::Error, SocketError, SystemCallError, IOError,
+                        OpenSSL::SSL::SSLError].freeze
+
+      # An answer Net::HTTP could not read as HTTP: a malformed status line, header or chunk
+      # (HTTPBadResponse), or a malformed Content-Length or Content-Range (HTTPHeaderSyntaxError).
+      # These are what Net::HTTP#request raises when the bytes that came back are not HTTP; nothing
+      # says another attempt reads them differently, so they are not retryable.
+      PROTOCOL_ERRORS = [Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError].freeze
 
       # Nil when the AWS credentials are absent.
       def self.from_env(template:, env: ENV)
@@ -53,12 +82,14 @@ module EdiGem
 
       def fetch(uri)
         path = uri.to_s.delete_prefix("s3://#{bucket}/")
-        raise ArgumentError, "#{uri} is not in s3://#{bucket}" if path == uri.to_s
+        # A uri this archive did not make is stored data, not a defect in the call: asking again
+        # reads the same uri, so it is not retryable.
+        raise ArchiveFailed, "#{uri} is not in s3://#{bucket}" if path == uri.to_s
 
         response = reach(signed_get(path), path)
         return response.body if response.is_a?(Net::HTTPSuccess)
 
-        raise ArchiveFailed, "s3://#{bucket}/#{path} answered #{response.code}"
+        refused(response, path)
       end
 
       private
@@ -70,11 +101,27 @@ module EdiGem
         request
       end
 
-      # A network failure is raised as ArchiveFailed, like a refused write.
+      # Raises ArchiveFailed for a failure in NETWORK_ERRORS (retryable) or PROTOCOL_ERRORS (not).
+      # Any other exception, a TypeError or ArgumentError from a defect in the call included, is
+      # not an archive failure and reaches the caller as it was raised.
+      #
+      # Timeout::Error covers Net::OpenTimeout, ReadTimeout and WriteTimeout; IOError covers
+      # EOFError; SystemCallError covers Errno::ECONNRESET, ECONNREFUSED, ECONNABORTED,
+      # EHOSTUNREACH, ETIMEDOUT and EPIPE.
       def reach(request, path)
         client.request(request)
-      rescue StandardError => error
-        raise ArchiveFailed, "s3://#{bucket}/#{path} could not be reached (#{error.class})"
+      rescue *NETWORK_ERRORS => error
+        raise ArchiveFailed.new("s3://#{bucket}/#{path} could not be reached (#{error.class})",
+                                retryable: true)
+      rescue *PROTOCOL_ERRORS => error
+        raise ArchiveFailed.new("s3://#{bucket}/#{path} answered with no readable HTTP (#{error.class})",
+                                retryable: false)
+      end
+
+      # A non-success answer, retryable when its status is in RETRYABLE_STATUSES.
+      def refused(response, path)
+        raise ArchiveFailed.new("s3://#{bucket}/#{path} answered #{response.code}",
+                                retryable: RETRYABLE_STATUSES.include?(response.code.to_s))
       end
 
       # A dotted bucket name does not match AWS's wildcard certificate.
@@ -87,7 +134,7 @@ module EdiGem
       def answer(response, path)
         return "s3://#{bucket}/#{path}" if response.is_a?(Net::HTTPSuccess)
 
-        raise ArchiveFailed, "s3://#{bucket}/#{path} answered #{response.code}"
+        refused(response, path)
       end
 
       def client

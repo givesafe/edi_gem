@@ -4,7 +4,13 @@
 # discovery.
 module EdiGem
   # Every error this gem raises inherits from this.
-  class Error < StandardError; end
+  class Error < StandardError
+    # The error's name to record, as a Rejection's code is: credential_missing for
+    # CredentialMissing. The message names the failure and never a value, so it is safe to keep.
+    def code
+      self.class.name.split("::").last.gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
+    end
+  end
 
   # The inquiry carries no payer code for the source it was sent to.
   class PayerNotRouted < Error; end
@@ -36,8 +42,19 @@ module EdiGem
   # the billed answer is never received and then lost.
   class ArchiveNotConfigured < Error; end
 
-  # The configured archive refused or could not be reached.
-  class ArchiveFailed < Error; end
+  # The configured archive refused or could not be reached. `retryable?` says whether the same
+  # read or write may succeed later, as Fault#retryable? does for a source: true for a network
+  # failure and an answer the store's own guidance calls transient (see Archive::S3 and
+  # Archive::Local for which), false for a missing or refused object. False unless the raiser
+  # says otherwise, so a failure nobody classified is not retried.
+  class ArchiveFailed < Error
+    def initialize(message = nil, retryable: false)
+      @retryable = retryable
+      super(message)
+    end
+
+    def retryable? = @retryable
+  end
 
   # The source answered with success and a body that cannot be parsed. The message never
   # includes any part of the body.

@@ -15,12 +15,19 @@ module EdiGem
         "file://#{File.expand_path(path)}"
       end
 
+      # A read the system says to try again (interrupted, busy, timed out) is retryable. Every
+      # other failure, a missing file or a refused permission included, will not pass by asking
+      # again without something changing, and is not.
+      RETRYABLE_ERRORS = [Errno::EAGAIN, Errno::EINTR, Errno::EBUSY, Errno::ETIMEDOUT].freeze
+
       def fetch(uri)
-        raise ArgumentError, "#{uri} is not a local archive's" unless uri.to_s.start_with?("file://")
+        # As for S3: a uri this archive did not make is not retryable.
+        raise ArchiveFailed, "#{uri} is not a local archive's" unless uri.to_s.start_with?("file://")
 
         File.binread(uri.to_s.delete_prefix("file://"))
       rescue SystemCallError => error
-        raise ArchiveFailed, "#{uri} could not be read (#{error.class})"
+        raise ArchiveFailed.new("#{uri} could not be read (#{error.class})",
+                                retryable: RETRYABLE_ERRORS.any? { |kind| error.is_a?(kind) })
       end
     end
   end

@@ -15,9 +15,12 @@ module EdiGem
         # Where a batch results item carries the identifier it was sent with.
         IDENTIFIER = "submitterTransactionIdentifier"
 
-        def initialize(clearinghouse:, archive: nil)
+        # `directory` is the source's payer directory, which each Response's plans ask for their
+        # payer's ID.
+        def initialize(clearinghouse:, archive: nil, directory: nil)
           @clearinghouse = clearinghouse
           @archive = archive
+          @directory = directory
         end
 
         # Checked before anything is sent, so a billed answer is never received and then lost.
@@ -47,7 +50,7 @@ module EdiGem
           Response.new(**reading.parts, payload: payload, exchanges: [exchange],
                                         handle: handle, state: (:pending if status == PENDING),
                                         settled: status.nil? || status == COMPLETE,
-                                        stored: stored)
+                                        stored: stored, directory: @directory)
         end
 
         # Files each item of a batch page as its own object, named `<name>_<identifier>`, and

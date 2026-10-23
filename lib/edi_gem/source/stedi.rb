@@ -17,6 +17,7 @@ module EdiGem
     # discovery always reports applicationMode "production", whatever the key.
     class Stedi < Base
       include Batching
+      include Directory
 
       NAME = :stedi
       DISCOVERY_SCHEMA = :stedi_discovery
@@ -95,6 +96,9 @@ module EdiGem
 
       # A discovery answer the archive kept (a Stored's response_uri), read again into a Response.
       # Nothing is sent to Stedi, so nothing is billed: the answer is the one already paid for.
+      # Raises ArchiveNotConfigured with no archive, and ArchiveFailed when the body cannot be read:
+      # `retryable?` is true when the archive could not be reached or answered that it is failing,
+      # and false when the body is missing or refused, which asking again will not change.
       def archived_discovery(response_uri)
         raise ArchiveNotConfigured, "no archive is configured to read a discovery from" if @archive.nil?
 
@@ -105,10 +109,26 @@ module EdiGem
                                  feature: DISCOVERY)
       end
 
+      # The common name for archived_discovery, so a caller need not know the source.
+      def archived(response_uri) = archived_discovery(response_uri)
+
+      # The question a kept discovery request asked (a Stored's request_uri), as an
+      # Inquiry::Question (Request.question), so a discovery collected later is compared with what
+      # was sent. Nothing is sent to Stedi. Raises ArchiveNotConfigured with no archive;
+      # ArchiveFailed when the body is missing (not `retryable?`) or the archive can't be reached or
+      # answered that it is failing (`retryable?`), as for archived_discovery, and for a uri (nil
+      # included) this archive did not make (not `retryable?`), as Archive#fetch does;
+      # UnreadableBody when the body is not a discovery request. Nothing is recovered in part.
+      def archived_question(request_uri)
+        raise ArchiveNotConfigured, "no archive is configured to read a discovery request from" if @archive.nil?
+
+        Request.question(Document::Json.parse(@archive.fetch(request_uri)))
+      end
+
       private
 
       def responses
-        @responses ||= Responses.new(archive: @archive, clearinghouse: NAME)
+        @responses ||= Responses.new(archive: @archive, clearinghouse: NAME, directory: self)
       end
 
       def request(inquiry, payer_code: nil)
@@ -120,8 +140,8 @@ module EdiGem
       end
 
       def post(operation, body, key: nil)
-        connection.post(operation, JSON.generate(body),
-                        idempotency_key: key || idempotency_key(operation, body))
+        connection_for(operation).post(operation, JSON.generate(body),
+                                       idempotency_key: key || idempotency_key(operation, body))
       end
 
       # Derived from the serialized request, so a retry above this gem asks the same billable
@@ -130,8 +150,13 @@ module EdiGem
         Digest::SHA256.hexdigest("#{operation}:#{JSON.generate(body)}")
       end
 
-      def get(operation, path)
-        connection.get(operation, path)
+      def get(operation, path, query: nil)
+        connection_for(operation).get(operation, path, query: query)
+      end
+
+      # Where an operation is sent. Every operation shares the one connection to Stedi.
+      def connection_for(_operation)
+        connection
       end
 
       def connection

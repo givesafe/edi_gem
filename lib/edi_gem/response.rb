@@ -27,26 +27,13 @@ module EdiGem
     attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored,
                 :people, :found_plans
 
-    # Who the payer answered about, and how they compare with who was asked about. `person` is
-    # nil when the answer named nobody.
-    Identification = Struct.new(:person, :result, keyword_init: true) do
-      # `person` compared with `asked` (Identity.compare's options); nobody compares with nothing.
-      def self.of(person, asked, **options)
-        new(person: person, result: Identity.compare(asked: asked, returned: person&.identity || {},
-                                                     corrected: person&.identity_corrected? || false,
-                                                     **options))
-      end
-
-      # The payer answered about the patient in the other part of the answer than asked: a
-      # dependent asked as the subscriber, or the other way round.
-      def moved?(as_dependent)
-        !person.nil? && result.matched? && person.dependent? != as_dependent
-      end
-    end
+    # Who the payer answered about (see EdiGem::Identification).
+    Identification = EdiGem::Identification
 
     # One field for each part of an answer, so it runs one line past the length rule.
     def initialize(benefits: [], rejections: [], payload: nil, exchanges: [], handle: nil, # rubocop:disable Metrics/MethodLength
-                   state: nil, details: {}, settled: false, stored: nil, people: [], found_plans: [])
+                   state: nil, details: {}, settled: false, stored: nil, people: [], found_plans: [],
+                   directory: nil)
       @benefits = benefits
       @rejections = rejections
       @people = people
@@ -58,6 +45,7 @@ module EdiGem
       @details = details
       @settled = settled
       @stored = stored
+      @directory = directory
     end
 
     # `stored` is the Archive::Stored for the raw bodies when the send asked to archive. nil
@@ -102,10 +90,29 @@ module EdiGem
     # matches is the one. When nobody matches, the part asked about is the one reported: a
     # dependent asked about and no dependent back means the payer answered about the subscriber.
     def identify(asked, as_dependent: false, **options)
-      order = [subscriber_person, *dependent_people].compact
-      compared = (as_dependent ? order.rotate : order).map { |person| Identification.of(person, asked, **options) }
-      compared.find { |found| found.result.matched? } || compared.first || Identification.of(nil, asked)
+      found = compared(asked.to_h, as_dependent, options)
+      Identification.new(**found.to_h, refusal: PersonRefusal.among(@rejections), member_id_asked: true)
     end
+
+    # What the answer says of the person's coverage on the day asked about (a Verdict name). A
+    # check names no date of service, so the payer answers about the day it was asked. An answer
+    # about someone else (`identification` mismatched) is unanswered, never their coverage; with
+    # no identification, only the payer's refusal can say so.
+    def verdict(on:, identification: identify({}))
+      identification.mismatched? ? :unanswered : reading.of_plan(coverage_on(on))
+    end
+
+    # The status code of the benefit line that decided #verdict (Coverage::Finding#code), to record
+    # beside it; nil when no line decided it: an unanswered state, or an answer about someone else.
+    def verdict_code(on:, identification:) = (reading.code_of(coverage_on(on)) unless identification.mismatched?)
+
+    # A discovery's verdict among its medical plans, each read on the day: a plan that came back
+    # decides, whatever refusals came with it.
+    def discovery_verdict(on:, plans: medical_plans) = reading.among(plans.map { |plan| plan.coverage_on(on) })
+
+    # The code of the first refusal, to record beside an unanswered verdict; nil when none. A
+    # code the codec did not name is its raw string.
+    def error_code = @rejections.first&.code&.to_s
 
     def rejections_at(level)
       @rejections.select { |rejection| rejection.level == level }
@@ -120,11 +127,29 @@ module EdiGem
     end
 
     # Whether the plan covers the person on this day (Coverage's two-part test).
-    def coverage_on(date)
-      Coverage.on(@benefits, date)
-    end
+    def coverage_on(date) = Coverage.on(@benefits, date)
+
+    # A discovery's medical plans (MedicalPlan.all): dental and vision left out, and a Medicaid
+    # plan an MCO names paired with the MCO's. `asked` is who the discovery asked about, for each
+    # plan's identification. `directory` is the source's payer directory, which each plan asks for
+    # its payer_id; nil on an answer no source read.
+    def medical_plans(asked: nil) = MedicalPlan.all(@found_plans, directory: @directory, asked: asked)
+
+    # A check's answer as the plan it is about (CheckedPlan), for the person `identification`
+    # names (see #verdict).
+    def checked_plan(identification: identify({})) = CheckedPlan.new(self, identification: identification)
 
     private
+
+    # The Verdict for this answer's state and refusals.
+    def reading = Verdict.new(state, provider_refused: provider_refusals.any?)
+
+    # The first person who matches, in the order `identify` describes.
+    def compared(asked, as_dependent, options)
+      order = [subscriber_person, *dependent_people].compact
+      found = (as_dependent ? order.rotate : order).map { |person| Identification.of(person, asked, **options) }
+      found.find { |one| one.result.matched? } || found.first || Identification.of(nil, asked)
+    end
 
     # An empty answer with a handle is pending unless the source said it is settled; only a
     # settled empty answer is no_coverage.

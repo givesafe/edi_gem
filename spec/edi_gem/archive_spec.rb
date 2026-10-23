@@ -78,5 +78,10 @@ RSpec.describe EdiGem::Archive do
       expect { archive.keep(exchange, clearinghouse: :stedi, feature: :discovery, name: "1") }
         .to raise_error(NotImplementedError, %r{cannot write raw/discovery/request/1_.*\.json})
     end
+
+    it "cannot read a body back" do
+      expect { archive.fetch("raw/discovery/response/1.json") }
+        .to raise_error(NotImplementedError, %r{cannot read raw/discovery/response/1\.json})
+    end
   end
 end

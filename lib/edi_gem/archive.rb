@@ -56,7 +56,8 @@ module EdiGem
     end
 
     # The body a `keep` filed at `uri` (a Stored's request_uri or response_uri), as it was written.
-    # Raises ArchiveFailed when it cannot be read, and refuses a uri this archive did not make.
+    # Raises ArchiveFailed when it cannot be read, and for a uri (nil included) this archive did not
+    # make, which is not `retryable?` and sends nothing.
     def fetch(uri)
       raise NotImplementedError, "#{self.class} cannot read #{uri}"
     end

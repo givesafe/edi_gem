@@ -5,7 +5,7 @@ module EdiGem
   module Source
     # The sources a caller can ask for by name, and the class each name stands for. Resolved when
     # asked, because the source files load after this one.
-    CLASSES = { stedi: :Stedi, office_ally: :OfficeAlly, optum: :Optum }.freeze
+    CLASSES = { stedi: :Stedi, office_ally: :OfficeAlly, optum: :Optum, mock: :Mock }.freeze
 
     # A source built by name, so a caller picks the clearinghouse from data and never names a
     # class. `config` is whatever that source's initializer takes.
@@ -73,6 +73,18 @@ module EdiGem
         unsupported(:discovery)
       end
 
+      # A discovery answer the archive kept (a Stored's response_uri), read again into a Response
+      # without sending anything.
+      def archived(_response_uri)
+        unsupported(:discovery)
+      end
+
+      # The question an archived discovery request carried (a Stored's request_uri), as an
+      # Inquiry::Question, read without sending anything.
+      def archived_question(_request_uri)
+        unsupported(:discovery)
+      end
+
       # Submits many eligibility checks as one batch. `inquiries` is a Hash of the caller's
       # identifier => Inquiry::Eligibility; an Array is keyed by position. Returns a
       # Batch::Submission.
@@ -94,6 +106,17 @@ module EdiGem
       # One Batch::Answers page: the full answer of each check in the batch that has finished.
       def batch_results(_batch_id, page_token: nil, page_size: nil, archive: nil)
         unsupported(:batch)
+      end
+
+      # The payers the source's payer directory returns for one term, as ListedPayers.
+      def payers(_term)
+        unsupported(:payer_directory)
+      end
+
+      # The source's own payer code for a code or alias from any answer, or nil when no single
+      # payer answers to it.
+      def payer_id_for(_payer_code)
+        unsupported(:payer_directory)
       end
       # rubocop:enable Lint/UnusedMethodArgument
 
