@@ -9,8 +9,6 @@ module EdiGem
   #
   # `secret` is the caller's, one for each kind of key, so neither shares a secret with another
   # use. Case, spacing and blank details don't change a key.
-  # A key's inputs, through the functions that make it.
-  # :reek:DataClump
   module RequestKey
     OPERATIONS = %i[eligibility discovery batch_item batch].freeze
     SPACE = /[[:space:]]+/
@@ -20,7 +18,8 @@ module EdiGem
     # The same details give the same fingerprint on any day, so a later question can tell nothing
     # has changed.
     def fingerprint(details, secret:)
-      digest(details, secret)
+      normalized = details.to_h { |name, value| [name.to_s, normalize(value)] }.reject { |_name, value| value.empty? }
+      OpenSSL::HMAC.hexdigest("SHA256", secret, JSON.generate(normalized.sort.to_h))
     end
 
     # The same operation and details on the same day give the same key: it is Stedi's
@@ -29,20 +28,11 @@ module EdiGem
     def idempotency_key(operation, details, secret:, on:)
       raise ArgumentError, "unknown operation #{operation}" unless OPERATIONS.include?(operation.to_sym)
 
-      digest(details.merge(operation: operation, day: on), secret)
+      fingerprint(details.merge(operation: operation, day: on), secret: secret)
     end
 
-    def digest(details, secret)
-      normalized = details.to_h { |name, value| [name.to_s, normalize(value)] }.reject { |_name, value| value.empty? }
-      OpenSSL::HMAC.hexdigest("SHA256", secret, JSON.generate(normalized.sort.to_h))
-    end
-
-    # A date or time, or text, as callers hold a detail.
-    # :reek:ManualDispatch
-    def normalize(value)
-      value = value.iso8601 if value.respond_to?(:iso8601)
-      value.to_s.gsub(SPACE, " ").strip.downcase
-    end
-    private_class_method :digest, :normalize
+    # A detail as text: a Date's is its ISO 8601 day.
+    def normalize(value) = value.to_s.gsub(SPACE, " ").strip.downcase
+    private_class_method :normalize
   end
 end
