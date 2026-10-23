@@ -10,7 +10,8 @@ module EdiGem
   #
   # `directory` is the source's payer directory (anything answering payer_id_for and
   # directory_name), asked only when payer_id is, so reading an answer again makes no directory
-  # call unless a caller wants the payer's ID. `asked` is who the discovery asked about.
+  # call unless a caller wants the payer's ID. `asked` is who the discovery asked about, a
+  # Person::Asked.
   class MedicalPlan
     include Concealed
     include AnsweredPlan
@@ -79,8 +80,7 @@ module EdiGem
     def identify(asked, **options) = @found_plan.identify(asked, **options)
 
     # The person matched compared with `asked`, and the details given beside the core with the
-    # ones the payer holds; with nobody asked, nothing is compared and nothing was given. An
-    # `asked` that is a hash of the core alone carries no given details.
+    # ones the payer holds; with nobody asked, nothing is compared and nothing was given.
     def identification
       @identification ||= identify(@asked.to_h, given_fields: given_fields)
     end
@@ -94,10 +94,6 @@ module EdiGem
 
     private
 
-    # `asked` is a Person::Asked or the core as a hash.
-    # :reek:ManualDispatch
-    def given_fields
-      @asked.respond_to?(:given_fields) ? @asked.given_fields(person) : {}
-    end
+    def given_fields = @asked&.given_fields(person) || {}
   end
 end

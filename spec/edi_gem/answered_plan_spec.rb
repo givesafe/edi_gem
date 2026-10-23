@@ -127,7 +127,8 @@ RSpec.describe EdiGem::AnsweredPlan do
   describe EdiGem::MedicalPlan do
     def answer(benefits:, people:, rejections: [])
       found = EdiGem::FoundPlan.new(benefits: benefits, people: people)
-      EdiGem::Response.new(found_plans: [found], rejections: rejections).medical_plans(asked: asked).fetch(0)
+      EdiGem::Response.new(found_plans: [found], rejections: rejections)
+                      .medical_plans(asked: EdiGem::Person::Asked.new(**asked)).fetch(0)
     end
 
     it_behaves_like "an answered plan"

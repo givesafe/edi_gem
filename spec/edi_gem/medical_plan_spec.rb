@@ -347,11 +347,6 @@ RSpec.describe EdiGem::MedicalPlan do
       expect(plan.identification.given_fields).to eq(address: :not_compared, ssn_last_four: :not_compared)
     end
 
-    it "is none WHEN asked with a hash of the core" do
-      expect(EdiGem::Response.new(found_plans: found).medical_plans(asked: asked).fetch(0).identification.given_fields)
-        .to eq({})
-    end
-
     # A polled answer whose question could not be recovered is compared with nobody, never with the
     # caller's record as it stands today.
     it "compares nothing and gives nothing WHEN asked about nobody" do
