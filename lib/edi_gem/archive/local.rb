@@ -21,13 +21,18 @@ module EdiGem
       RETRYABLE_ERRORS = [Errno::EAGAIN, Errno::EINTR, Errno::EBUSY, Errno::ETIMEDOUT].freeze
 
       def fetch(uri)
-        # As for S3: a uri this archive did not make is not retryable.
-        raise ArchiveFailed, "#{uri} is not a local archive's" unless uri.to_s.start_with?("file://")
-
-        File.binread(uri.to_s.delete_prefix("file://"))
+        File.binread(path_of(uri))
       rescue SystemCallError => error
         raise ArchiveFailed.new("#{uri} could not be read (#{error.class})",
                                 retryable: RETRYABLE_ERRORS.any? { |kind| error.is_a?(kind) })
+      end
+
+      # As for S3: a uri this archive did not make is not retryable.
+      def path_of(uri)
+        text = uri.to_s
+        raise ArchiveFailed, "#{uri} is not a local archive's" unless text.start_with?("file://")
+
+        text.delete_prefix("file://")
       end
     end
   end

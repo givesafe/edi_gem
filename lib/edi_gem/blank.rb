@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# The gem's namespace: one API for healthcare eligibility across clearinghouses.
 module EdiGem
   # Text that says nothing: empty, or only spaces.
   BLANK = /\A[[:space:]]*\z/

@@ -114,12 +114,14 @@ module EdiGem
           primary = { "entityIdentifier" => "Primary Payer", "entityType" => "Non-Person Entity",
                       "entityName" => "MOCK MEDICAID", "entityIdentification" => "PI",
                       "entityIdentificationValue" => MEDICAID_PAYER }
-          mco_items = each_payer(@person, "1").each do |found|
-            found["benefitsInformation"].each { |line| line["benefitsRelatedEntities"] = [primary] }
-          end
+          mco_items = each_payer(@person, "1").each { |found| name_primary_payer(found, primary) }
           medicaid = item(@person, MEDICAID_PAYER, "1", member_id: MEDICAID_ID)
           medicaid["planInformation"] = { "medicaidRecipientIdNumber" => MEDICAID_ID }
           mco_items + [medicaid]
+        end
+
+        def name_primary_payer(found, primary)
+          found["benefitsInformation"].each { |line| line["benefitsRelatedEntities"] = [primary] }
         end
 
         # `name` is the status's label; the plan's own name is in `planCoverage`, as Stedi sends it.

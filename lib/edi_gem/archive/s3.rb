@@ -79,10 +79,11 @@ module EdiGem
       end
 
       def fetch(uri)
-        path = uri.to_s.delete_prefix(location(""))
+        text = uri.to_s
+        path = text.delete_prefix(location(""))
         # A uri this archive did not make is stored data, not a defect in the call: asking again
         # reads the same uri, so it is not retryable.
-        raise ArchiveFailed, "#{uri} is not in s3://#{bucket}" if path == uri.to_s
+        raise ArchiveFailed, "#{uri} is not in s3://#{bucket}" if path == text
 
         succeeded(reach(signed(Net::HTTP::Get, path), path), path).body
       end
@@ -121,8 +122,9 @@ module EdiGem
       def succeeded(response, path)
         return response if response.is_a?(Net::HTTPSuccess)
 
-        raise ArchiveFailed.new("#{location(path)} answered #{response.code}",
-                                retryable: RETRYABLE_STATUSES.include?(response.code.to_s))
+        status = response.code
+        raise ArchiveFailed.new("#{location(path)} answered #{status}",
+                                retryable: RETRYABLE_STATUSES.include?(status.to_s))
       end
 
       # A dotted bucket name does not match AWS's wildcard certificate.

@@ -18,14 +18,22 @@ module EdiGem
     # The medical plans among a discovery's found plans. A Medicaid plan another plan names as its
     # primary payer goes with that plan, and is not a plan of its own.
     def self.all(found_plans, directory: nil, asked: nil)
-      medicaid_plans = found_plans.select do |plan|
-        (found_plans - [plan]).any? { |other| other.names_as_primary_payer?(plan) }
-      end
+      medicaid_plans = found_plans.select { |plan| named_as_primary?(plan, found_plans) }
       (found_plans - medicaid_plans).select(&:medical?).map do |plan|
-        new(plan, medicaid: medicaid_plans.find { |medicaid| plan.names_as_primary_payer?(medicaid) },
-                  directory: directory, asked: asked)
+        new(plan, medicaid: medicaid_for(plan, medicaid_plans), directory: directory, asked: asked)
       end
     end
+
+    # Whether another of the found plans names `plan` as its primary payer.
+    def self.named_as_primary?(plan, found_plans)
+      (found_plans - [plan]).any? { |other| other.names_as_primary_payer?(plan) }
+    end
+
+    # The Medicaid plan `plan` names as its primary payer, if one is found.
+    def self.medicaid_for(plan, medicaid_plans)
+      medicaid_plans.find { |medicaid| plan.names_as_primary_payer?(medicaid) }
+    end
+    private_class_method :named_as_primary?, :medicaid_for
 
     def initialize(found_plan, medicaid: nil, directory: nil, asked: nil)
       @found_plan = found_plan

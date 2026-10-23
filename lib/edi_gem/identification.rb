@@ -35,7 +35,8 @@ module EdiGem
     def fields
       return refusal.field_results if refusal
 
-      member_id_asked ? result.fields.merge(member_id: :not_returned) : result.fields
+      found = result.fields
+      member_id_asked ? found.merge(member_id: :not_returned) : found
     end
 
     # Each detail given beside the core (`address`, `ssn_last_four`), present only for the details
