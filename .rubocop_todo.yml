@@ -29,7 +29,6 @@ RSpec/IdenticalEqualityAssertion:
   Exclude:
     - 'spec/edi_gem/policy_spec.rb'
     - 'spec/edi_gem/source/connection_spec.rb'
-    - 'spec/edi_gem/source/office_ally_spec.rb'
 
 # Configuration parameters: AssignmentOnly.
 RSpec/InstanceVariable:

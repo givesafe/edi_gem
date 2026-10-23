@@ -200,7 +200,7 @@ RSpec.describe EdiGem::Source::OfficeAlly do
     end
 
     it "carries the payload length, which a real-time request may not" do
-      expect(submission.metadata["PayloadLength"]).to eq(submission.metadata["PayloadLength"])
+      expect(submission.metadata["PayloadLength"]).to match(/\A[1-9]\d*\z/)
     end
 
     it "states the length in bytes rather than in characters" do
