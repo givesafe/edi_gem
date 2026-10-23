@@ -8,10 +8,9 @@ module EdiGem
   # Its own fields are the FoundPlan's; the Medicaid plan adds its ID and its benefit lines. It
   # plays AnsweredPlan.
   #
-  # `directory` is the source's payer directory (anything answering payer_id_for and
-  # directory_name), asked only when payer_id is, so reading an answer again makes no directory
-  # call unless a caller wants the payer's ID. `asked` is who the discovery asked about, a
-  # Person::Asked.
+  # `directory` is the source's payer directory (anything answering payer_id_for), asked only
+  # when payer_id is, so reading an answer again makes no directory call unless a caller wants
+  # the payer's ID. `asked` is who the discovery asked about, a Person::Asked.
   class MedicalPlan
     include Concealed
     include AnsweredPlan
@@ -52,9 +51,6 @@ module EdiGem
     # and nothing is remembered, so asking again searches again.
     def payer_id = @directory&.payer_id_for(payer_code)
 
-    # The clearinghouse whose payer IDs payer_id is one of (:stedi), or nil with no directory.
-    def clearinghouse = @directory&.directory_name
-
     # A field of the plan itself (plan_name, plan_number, ...), as FoundPlan#[] reads it: the
     # first of its own lines that holds it. The Medicaid plan's lines name none of the plan's own.
     def [](field) = @found_plan[field]
@@ -69,9 +65,6 @@ module EdiGem
 
     # Who the payer matched, as it holds them (FoundPlan#person), or nil.
     def person = @found_plan.person
-
-    # The address the payer holds for the person matched, or nil.
-    def address = person&.address
 
     # :self, :dependent, or nil when the payer did not say (Person#relationship).
     def relationship = person&.relationship

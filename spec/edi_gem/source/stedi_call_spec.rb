@@ -384,7 +384,7 @@ RSpec.describe "calling Stedi" do
 
       plans = source.archived(kept.stored.response_uri).medical_plans
 
-      expect(plans.map { |plan| [plan.member_id, plan.address.to_h] })
+      expect(plans.map { |plan| [plan.member_id, plan.person.address.to_h] })
         .to eq([["MOCK00000002", { line1: "123 Example St", line2: "Apt 4", city: "Testville", state: "ZZ",
                                    postal_code: "00000" }]])
     end

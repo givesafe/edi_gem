@@ -10,8 +10,6 @@ module EdiGem
   #   pending           an asynchronous answer that has not arrived
   # An error is never a lapse: whatever the payer did not say reads as unanswered.
   class Verdict
-    NAMES = %i[active inactive not_covered unanswered provider_refused pending].freeze
-
     ANSWERED = %i[complete partial].freeze
 
     # What the payer said of the plan (service type 30); cannot_process or nothing is unanswered.

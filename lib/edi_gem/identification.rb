@@ -16,16 +16,8 @@ module EdiGem
                                    corrected: person&.identity_corrected? || false, **options))
     end
 
-    # The payer answered about the patient in the other part of the answer than asked: a
-    # dependent asked as the subscriber, or the other way round.
-    def moved?(as_dependent)
-      !person.nil? && result.matched? && person.dependent? != as_dependent
-    end
-
     # :matched, :mismatched or :not_compared. A loose match is a match.
     def match = refusal ? refusal.match : result.outcome
-
-    def matched? = match == :matched
 
     # The payer answered about someone else: the person asked about may still be covered.
     def mismatched? = match == :mismatched
@@ -48,8 +40,6 @@ module EdiGem
     #                  no four digits; an address without a first line or five postal digits)
     #   :not_returned  the question's can be compared, and the payer holds none to compare with
     def given_fields = self[:given_fields] || {}
-
-    def differing = fields.select { |_, field| field == :differs }.keys
 
     # Why the person did not match: the refusal's reason, :identity_mismatch by our comparison,
     # or nil.

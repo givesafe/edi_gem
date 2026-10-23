@@ -3,13 +3,14 @@
 module EdiGem
   module Source
     class Stedi < Base
-      # Stedi's payer directory. A search is not a billed transaction.
+      # Answers, from Stedi's payer directory, each payer's primary code (the one an inquiry is
+      # routed with) and whether Stedi carries eligibility checks to it. An answer names a payer by
+      # whatever code or alias the payer used, so a caller asks here for the code to route or keep
+      # on: #payer_id_for gives that code alone, as MedicalPlan#payer_id reads it, and #payers the
+      # ListedPayers themselves, eligibility included. A search is a request, not a billed
+      # transaction.
       module Directory
         PAGE_SIZE = 100
-        # Whose payer IDs payer_id_for gives: Stedi's, for the mock too, which asks Stedi's directory.
-        NAME = :stedi
-
-        def directory_name = NAME
 
         # The payers the directory returns for one term, best match first. Which of them are the
         # payer asked for is for the caller to decide.

@@ -10,15 +10,16 @@ The caller contract for each is in the README's "V1 reference".
   `CheckedPlan#verdict` and `#verdict_code`; `EdiGem::CheckedPlan`, `EdiGem::MedicalPlan` (both
   `EdiGem::AnsweredPlan`) and `EdiGem::Verdict`. A caller reads a check or a discovery in coverage
   terms and never reads a benefit line's codes itself.
-- `MedicalPlan#payer_id` and `#clearinghouse`: Stedi's payer ID for a plan's payer code, from
-  Stedi's payer directory (`Source::Base#payers`, `#payer_id_for`; `EdiGem::ListedPayer`). One
-  search per code for the source's lifetime; not billed.
+- `MedicalPlan#payer_id`: Stedi's payer ID for a plan's payer code, from Stedi's payer
+  directory (`Source::Base#payers`, `#payer_id_for`; `EdiGem::ListedPayer`). One search per code
+  for the source's lifetime; not billed.
 - `Source::Base#archived` (the common name for `archived_discovery`) and `#archived_question`,
   which reads a kept discovery request back as an `Inquiry::Question` (`Person::Asked` and the day
   asked about). `Inquiry::Discovery#question` builds the same from an inquiry.
-- `Identification#match`, `#matched?`, `#mismatched?`, `#fields`, `#differing`, `#reason` and
-  `#answered_as`, with the payer's refusal of the person (`EdiGem::PersonRefusal`) winning over
-  our comparison.
+- `Identification#match`, `#mismatched?`, `#fields`, `#reason` and `#answered_as`, with the
+  payer's refusal of the person (`EdiGem::PersonRefusal`) winning over our comparison.
+- `Identification#moved?`, reviewed with `Response#identify`, is removed: no caller reads it.
+  `#answered_as` says which part of the answer the person came back in.
 - `Identification#given_fields`, `Address#compare` and `EdiGem::LastFour`: a given address and
   the last four of an SSN are compared with what the payer holds, and never change the match.
   `Person#ssn_last_four`, `#relationship` and `#born_on`. `Identification` is its own constant.

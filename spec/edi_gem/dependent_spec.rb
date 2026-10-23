@@ -111,7 +111,6 @@ RSpec.describe "asking about a dependent" do
 
       expect(found.person).to be_dependent
       expect(found.result).to be_matched
-      expect(found).to_not be_moved(true)
     end
 
     it "reads the payer's correction codes on the dependent" do
@@ -145,7 +144,7 @@ RSpec.describe "asking about a dependent" do
       found = answer.identify(asked, as_dependent: false)
 
       expect(found.person).to be_dependent
-      expect(found).to be_moved(false)
+      expect(found).to have_attributes(match: :matched, answered_as: :dependent)
     end
 
     it "reads no person from a subscriber part that holds only a refusal" do

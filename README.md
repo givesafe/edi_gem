@@ -170,7 +170,7 @@ found = response.identify({ first_name: "Leo", last_name: "Garcia", date_of_birt
 found.person                 # who the payer answered about, or nil
 found.result.outcome         # => :matched, :mismatched or :not_compared
 found.result.fields          # => { first_name: :matched, last_name: :matched, date_of_birth: :differs }
-found.moved?(true)           # the payer put the patient in the other part than asked
+found.answered_as            # => :dependent, the part of the answer the payer put them in
 ```
 
 A payer may move the patient between the subscriber and dependent parts, or ignore a dependent
@@ -372,7 +372,8 @@ response.error_code        # => nil
 
 ### Verdict names (proposed)
 
-`EdiGem::Verdict::NAMES`, the one word to record for an answer:
+`CheckedPlan#verdict` and `Response#discovery_verdict` give one of these names, the one word to
+record for an answer:
 
 | name | meaning |
 |---|---|
@@ -439,9 +440,9 @@ plan.identification.match            # => :matched
 | `lines` | Array of `AnsweredPlan::Line` | `benefit_type`, `service_types`, `insurance_type`, `plan_name`, `in_network` (nil when the payer did not say); empty when none |
 
 A `CheckedPlan` also has `verdict(on:)` and `verdict_code(on:)` (Readers, above), which weigh
-who the payer answered about. A `MedicalPlan` also has `payer_id` (above), `clearinghouse` (`:stedi`, or nil with no
-directory), `person`, `address` (the address the payer holds, or nil) and `benefits`. Dental and
-vision plans are not medical plans. A Medicaid plan another plan names as its primary payer is
+who the payer answered about. A `MedicalPlan` also has `payer_id` (above), `person` (whose
+`address` is the one the payer holds) and `benefits`. Dental and vision plans are not medical
+plans. A Medicaid plan another plan names as its primary payer is
 part of that plan, not a plan of its own.
 
 ### `Person`
@@ -472,8 +473,8 @@ person.address&.postal_code # => "00000"
 
 ### `Identification`
 
-Who the payer answered about, and how they compare with who was asked. `person`, `result` (an
-`Identity::Result`) and `moved?` are reviewed; the rest of this table is **(proposed)**.
+Who the payer answered about, and how they compare with who was asked. `person` and `result` (an
+`Identity::Result`) are reviewed; the rest of this table is **(proposed)**.
 
 ```ruby
 id = response.identify({ first_name: "Jordan", last_name: "Example", date_of_birth: "19900101" })
@@ -492,7 +493,6 @@ id.given_fields  # => {}
 | `given_fields` | Hash | `address` and `ssn_last_four`, only for details the question carried; a detail it left out has no key. Each `:matched`, `:differs`, `:not_compared` (ours can't be compared) or `:not_returned` (the payer's can't). Empty on a check. They never change `match` |
 | `reason` | Symbol or nil | `:date_of_birth_mismatch`, `:name_mismatch`, `:member_id_invalid` or `:not_found` from a refusal; `:identity_mismatch` from our comparison; nil when it matched or nothing was compared |
 | `answered_as` | Symbol or nil | `:subscriber` or `:dependent`; nil when nobody was compared or the payer refused |
-| `moved?(as_dependent)` | Boolean | the payer answered about the patient in the other part than asked |
 
 The name and birth date rules are in "Dependents, and who the payer answered about" above.
 **(proposed)** The address rule (`Address#compare`) compares the first line's words and the

@@ -34,7 +34,7 @@ RSpec.describe EdiGem::AnsweredPlan do
     end
 
     it "compares who the payer answered about with who was asked" do
-      expect(plan.identification).to be_matched
+      expect(plan.identification.match).to eq :matched
     end
 
     it "gives the lines to keep, each in the shared words" do

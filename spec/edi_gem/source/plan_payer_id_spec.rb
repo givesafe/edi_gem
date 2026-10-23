@@ -30,7 +30,7 @@ RSpec.describe "A discovered plan's payer ID" do
     source, = stedi_answering(canned("stedi_discovery_complete"), directory_answer)
     plan = source.discovery(inquiry).medical_plans.fetch(0)
 
-    expect([plan.payer_code, plan.payer_id, plan.clearinghouse]).to eq(["77027", "99999", :stedi])
+    expect([plan.payer_code, plan.payer_id]).to eq(%w[77027 99999])
   end
 
   it "asks the directory only when asked, and once" do
@@ -99,7 +99,7 @@ RSpec.describe "A discovered plan's payer ID" do
 
       plans = source.archived(kept.stored.response_uri).medical_plans
 
-      expect([plans.map { |plan| plan.address.postal_code }, transport.paths.size]).to eq([["00000"], 1])
+      expect([plans.map { |plan| plan.person.address.postal_code }, transport.paths.size]).to eq([["00000"], 1])
     end
   end
 
@@ -112,13 +112,13 @@ RSpec.describe "A discovered plan's payer ID" do
     plan = source.discovery(EdiGem::Inquiry::Discovery.new(subscriber: active, provider: provider, as_of: "20261020"))
                  .medical_plans.fetch(0)
 
-    expect([plan.payer_code, plan.payer_id, plan.clearinghouse]).to eq(%w[11111 11111] + [:stedi])
+    expect([plan.payer_code, plan.payer_id]).to eq(%w[11111 11111])
   end
 
-  it "is nil, with no clearinghouse, on an answer no source read" do
+  it "is nil on an answer no source read" do
     plan = EdiGem::Response.new(found_plans: [EdiGem::FoundPlan.new(benefits: [EdiGem::Benefit.new(status: :active)],
                                                                     people: [])]).medical_plans.fetch(0)
 
-    expect([plan.payer_id, plan.clearinghouse]).to eq([nil, nil])
+    expect(plan.payer_id).to be_nil
   end
 end

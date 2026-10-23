@@ -10,7 +10,7 @@ module EdiGem
   # `secret` is the caller's, one for each kind of key, so neither shares a secret with another
   # use. Case, spacing and blank details don't change a key.
   module RequestKey
-    OPERATIONS = %i[eligibility discovery batch_item batch].freeze
+    OPERATIONS = %i[eligibility discovery batch].freeze
     SPACE = /[[:space:]]+/
 
     module_function

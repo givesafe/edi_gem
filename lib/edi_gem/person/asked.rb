@@ -50,11 +50,6 @@ module EdiGem
         to_h.values.none? { |value| EdiGem.blank?(value) }
       end
 
-      # The names as they are sent to a payer, so any spelling sent the same way is the same person.
-      def plain
-        with(first_name: Identity.plain(@first_name), last_name: Identity.plain(@last_name))
-      end
-
       # As the payer is sent them, on `member_id`. `relationship` is nil for a dependent whose
       # relationship is not known.
       def subscriber(member_id:, relationship: :self)

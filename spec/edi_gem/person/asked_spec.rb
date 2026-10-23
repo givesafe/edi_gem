@@ -18,12 +18,8 @@ RSpec.describe EdiGem::Person::Asked do
     expect(person.with(last_name: "  ")).to_not be_complete
   end
 
-  it "spells the names as they are sent to a payer, keeping the birth date" do
-    expect(person.plain).to eq person.with(first_name: "JOSE", last_name: "NUNEZ")
-  end
-
   it "gives its fields as the keys of a question read them" do
-    expect(person.plain.to_h).to eq(first_name: "JOSE", last_name: "NUNEZ", date_of_birth: Date.new(1980, 1, 2))
+    expect(person.to_h).to eq(first_name: "José", last_name: "Núñez", date_of_birth: Date.new(1980, 1, 2))
   end
 
   it "is equal to another holding the same fields, and only to one of its kind" do
@@ -75,8 +71,8 @@ RSpec.describe EdiGem::Person::Asked do
         .to eq([false, false, true])
     end
 
-    it "keeps them through #with and #plain" do
-      expect([given.plain.given_fields(held), given.plain.address])
+    it "keeps them through #with" do
+      expect([given.with(first_name: "Joe").given_fields(held), given.with(first_name: "Joe").address])
         .to eq([{ address: :matched, ssn_last_four: :matched }, address])
     end
 

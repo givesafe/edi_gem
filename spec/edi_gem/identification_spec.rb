@@ -22,7 +22,7 @@ RSpec.describe EdiGem::Identification do
       let(:answer) { response(people: [person]) }
 
       it "is matched, answered as the subscriber" do
-        expect(found).to have_attributes(match: :matched, matched?: true, reason: nil, answered_as: :subscriber)
+        expect(found).to have_attributes(match: :matched, reason: nil, answered_as: :subscriber)
       end
 
       it "has each field matched and the member ID not compared" do
@@ -39,8 +39,9 @@ RSpec.describe EdiGem::Identification do
                                          answered_as: :subscriber)
       end
 
-      it "names only which fields differ" do
-        expect(found.differing).to eq(%i[first_name date_of_birth])
+      it "names which fields differ" do
+        expect(found.fields).to eq(first_name: :differs, last_name: :matched, date_of_birth: :differs,
+                                   member_id: :not_returned)
       end
     end
 
@@ -90,7 +91,8 @@ RSpec.describe EdiGem::Identification do
 
       it "is mismatched for both names" do
         expect(found).to have_attributes(match: :mismatched, reason: :name_mismatch,
-                                         differing: %i[first_name last_name])
+                                         fields: { first_name: :differs, last_name: :differs,
+                                                   date_of_birth: :not_returned, member_id: :not_returned })
       end
     end
 
@@ -98,7 +100,9 @@ RSpec.describe EdiGem::Identification do
       let(:answer) { response(rejections: [rejection(:subscriber, :member_id_invalid)]) }
 
       it "is not_compared, since the ID may not be theirs, and names the ID" do
-        expect(found).to have_attributes(match: :not_compared, reason: :member_id_invalid, differing: [:member_id])
+        expect(found).to have_attributes(match: :not_compared, reason: :member_id_invalid,
+                                         fields: { first_name: :not_returned, last_name: :not_returned,
+                                                   date_of_birth: :not_returned, member_id: :differs })
       end
     end
 
@@ -106,7 +110,9 @@ RSpec.describe EdiGem::Identification do
       let(:answer) { response(rejections: [rejection(:subscriber, :subscriber_not_found)]) }
 
       it "is not_compared, not found, and names no field" do
-        expect(found).to have_attributes(match: :not_compared, reason: :not_found, differing: [])
+        expect(found).to have_attributes(match: :not_compared, reason: :not_found,
+                                         fields: { first_name: :not_returned, last_name: :not_returned,
+                                                   date_of_birth: :not_returned, member_id: :not_returned })
       end
     end
 
@@ -131,7 +137,7 @@ RSpec.describe EdiGem::Identification do
     it "takes whoever answers to_h as the person asked about" do
       asked_person = Struct.new(:first_name, :last_name, :date_of_birth, keyword_init: true).new(**asked)
 
-      expect(response(people: [person]).identify(asked_person)).to be_matched
+      expect(response(people: [person]).identify(asked_person).match).to eq(:matched)
     end
   end
 
@@ -173,8 +179,8 @@ RSpec.describe EdiGem::Identification do
     it "hands up the findings it was given, beside a core result they never change" do
       found = described_class.of(person(date_of_birth: "19800102"), asked, given_fields: { address: :matched })
 
-      expect([found.given_fields, found.match, found.differing])
-        .to eq([{ address: :matched }, :mismatched, %i[date_of_birth]])
+      expect([found.given_fields, found.match, found.fields[:date_of_birth]])
+        .to eq([{ address: :matched }, :mismatched, :differs])
     end
   end
 end

@@ -230,8 +230,8 @@ RSpec.describe EdiGem::MedicalPlan do
         expect(plan.identify(asked).result.outcome).to eq :not_compared
       end
 
-      it "has no person, address or relationship" do
-        expect([plan.person, plan.address, plan.relationship]).to eq([nil, nil, nil])
+      it "has no person or relationship" do
+        expect([plan.person, plan.relationship]).to eq([nil, nil])
       end
     end
 
@@ -243,7 +243,7 @@ RSpec.describe EdiGem::MedicalPlan do
       end
 
       it "carries the payer's address" do
-        expect(plan.address.to_h).to eq(line1: "9 Other Road", postal_code: "11111")
+        expect(plan.person.address.to_h).to eq(line1: "9 Other Road", postal_code: "11111")
       end
     end
 
@@ -310,8 +310,8 @@ RSpec.describe EdiGem::MedicalPlan do
     it "compares the person matched with who was asked about" do
       asked_about = EdiGem::Person::Asked.new(**asked)
 
-      expect(EdiGem::Response.new(found_plans: found).medical_plans(asked: asked_about).fetch(0).identification)
-        .to be_matched
+      expect(EdiGem::Response.new(found_plans: found).medical_plans(asked: asked_about).fetch(0).identification.match)
+        .to eq :matched
     end
   end
 

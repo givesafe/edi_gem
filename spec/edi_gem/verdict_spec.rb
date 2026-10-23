@@ -141,10 +141,6 @@ RSpec.describe EdiGem::Verdict do
 
       it("is pending") { expect(verdict).to eq(:pending) }
     end
-
-    it "is one of the verdict names" do
-      expect(described_class::NAMES).to include(response.checked_plan.verdict(on: today))
-    end
   end
 
   describe "CheckedPlan#verdict_code" do
