@@ -17,11 +17,6 @@ module EdiGem
     # An unknown answer is never reported as no coverage.
     STATES = %i[complete partial no_coverage not_identified payer_silent rejected pending].freeze
 
-    OUR_FAULT_LEVELS = %i[transport envelope].freeze
-    NOT_IDENTIFIED_CODES = %i[member_id_invalid name_mismatch subscriber_not_found
-                              patient_not_found date_of_birth_mismatch
-                              duplicate_subscriber].freeze
-
     TEST_MODE = "test"
 
     attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored,
@@ -65,7 +60,7 @@ module EdiGem
     end
 
     def state
-      @state ||= derive_state
+      @state ||= State.new(benefits: @benefits, rejections: @rejections, handle: @handle, settled: @settled).name
     end
 
     # The policyholder the answer names, or nil. `people` are an eligibility answer's; a
@@ -156,37 +151,6 @@ module EdiGem
       order = [subscriber_person, *dependent_people].compact
       found = (as_dependent ? order.rotate : order).map { |person| Identification.of(person, asked, **options) }
       found.find { |one| one.result.matched? } || found.first || Identification.of(nil, asked)
-    end
-
-    # An empty answer with a handle is pending unless the source said it is settled; only a
-    # settled empty answer is no_coverage.
-    def derive_state
-      return :pending if !@settled && @handle && @benefits.empty? && @rejections.empty?
-      return :rejected if provider_refusals.any? || our_request_refused?
-      return :not_identified if not_identified?
-      return :payer_silent if payer_silent?
-      return :no_coverage if benefit_lines.empty?
-      return :partial if @rejections.any?
-
-      :complete
-    end
-
-    def payer_silent?
-      rejections_at(:payer).any? || (benefit_lines.empty? && @rejections.any?)
-    end
-
-    def benefit_lines
-      @benefits.select(&:line?)
-    end
-
-    def our_request_refused?
-      @rejections.any? { |rejection| OUR_FAULT_LEVELS.include?(rejection.level) }
-    end
-
-    # The patient may be the subscriber or a dependent of one; either one not found is the same.
-    def not_identified?
-      %i[subscriber dependent].flat_map { |level| rejections_at(level) }
-                              .any? { |rejection| NOT_IDENTIFIED_CODES.include?(rejection.code) }
     end
 
     def concealed_inspect
