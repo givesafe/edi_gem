@@ -41,8 +41,9 @@ module EdiGem
         # A discovery's answer: pending, ERROR, or COMPLETE with what the scenario finds.
         def discovery(body, scenario)
           subscriber = body.fetch("subscriber")
-          return pending(scenario.name, subscriber) if scenario.pending?
-          return answer(ERROR, [], []) if scenario.name == :error
+          name = scenario.name
+          return pending(name, subscriber) if scenario.pending?
+          return answer(ERROR, [], []) if name == :error
 
           complete(subscriber, scenario)
         end
@@ -78,12 +79,17 @@ module EdiGem
         end
 
         def complete(subscriber, scenario, discovery_id = new_id)
-          items = Plans.new(subscriber, payers: payer_codes).for(scenario.name)
-          items.each { |item| item["confidence"] = confidence(scenario.name) }
-          body = answer(COMPLETE, items, errors(scenario), discovery_id)
-          body["warnings"] = [{ "code" => "MOCK", "description" => "mock warning" }] if scenario.name == :confident
+          name = scenario.name
+          body = answer(COMPLETE, found(subscriber, name), errors(scenario), discovery_id)
+          body["warnings"] = mock_warnings if name == :confident
           body
         end
+
+        def found(subscriber, name)
+          Plans.new(subscriber, payers: payer_codes).for(name).each { |item| item["confidence"] = confidence(name) }
+        end
+
+        def mock_warnings = [{ "code" => "MOCK", "description" => "mock warning" }]
 
         # Stedi labels every discovery "production", whatever the key.
         def answer(status, items, errors, discovery_id = new_id)

@@ -144,9 +144,9 @@ module EdiGem
       # The names as given, not as sent. The SSN, the address's first line and its postal code
       # make two discoveries of one person different questions.
       def asked
+        address = @subscriber.address
         { first_name: @subscriber.first_name, last_name: @subscriber.last_name, date_of_birth: birth_date,
-          ssn: @subscriber.ssn, address_line1: @subscriber.address&.line1,
-          postal_code: @subscriber.address&.postal_code }
+          ssn: @subscriber.ssn, address_line1: address&.line1, postal_code: address&.postal_code }
       end
     end
   end

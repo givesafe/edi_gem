@@ -82,7 +82,8 @@ module EdiGem
         end
 
         def http_response(code, body, headers = {})
-          response = Net::HTTPResponse::CODE_TO_OBJ.fetch(code.to_s).new("1.1", code.to_s, "")
+          status = code.to_s
+          response = Net::HTTPResponse::CODE_TO_OBJ.fetch(status).new("1.1", status, "")
           { "content-type" => "application/json" }.merge(headers).each { |name, value| response[name] = value }
           response.instance_variable_set(:@body, JSON.generate(body))
           response.instance_variable_set(:@read, true)
