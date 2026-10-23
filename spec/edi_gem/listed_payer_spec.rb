@@ -2,7 +2,7 @@
 
 RSpec.describe EdiGem::ListedPayer do
   subject(:payer) do
-    described_class.new(code: "99999", clearinghouse_id: "stedi-1", name: "EXAMPLE PAYER", aliases: ["ALIAS1"])
+    described_class.new(code: "99999", clearinghouse_id: "stedi-1", aliases: ["ALIAS1"])
   end
 
   it "answers to its primary code" do
@@ -15,10 +15,6 @@ RSpec.describe EdiGem::ListedPayer do
 
   it "answers to an alias" do
     expect(payer.answers_to?("ALIAS1")).to be true
-  end
-
-  it "does not answer to its name" do
-    expect(payer.answers_to?("EXAMPLE PAYER")).to be false
   end
 
   it "answers to its code when the directory gave it no clearinghouse ID" do
@@ -40,8 +36,14 @@ RSpec.describe EdiGem::ListedPayer do
         "aliases" => ["ALIAS1"], "transactionSupport" => { "eligibilityCheck" => "ENROLLMENT_REQUIRED" }
       )
 
-      expect([read.code, read.clearinghouse_id, read.name, read.aliases, read.eligibility])
-        .to eq(["99999", "stedi-99999", "EXAMPLE PAYER", ["ALIAS1"], "ENROLLMENT_REQUIRED"])
+      expect([read.code, read.clearinghouse_id, read.aliases, read.eligibility])
+        .to eq(["99999", "stedi-99999", ["ALIAS1"], "ENROLLMENT_REQUIRED"])
+    end
+
+    it "does not answer to the name the directory lists it by" do
+      read = described_class.from_stedi("primaryPayerId" => "99999", "displayName" => "EXAMPLE PAYER")
+
+      expect(read.answers_to?("EXAMPLE PAYER")).to be false
     end
 
     it "reads a payer listed with no aliases and no transaction support" do
