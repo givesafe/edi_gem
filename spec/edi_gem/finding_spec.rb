@@ -47,7 +47,10 @@ RSpec.describe EdiGem::Finding do
     {
       date_of_birth_mismatch: :held_differently, name_mismatch: :held_differently,
       member_id_invalid: :not_on_this_id, subscriber_not_found: :not_on_this_id,
-      patient_not_found: :not_on_this_id, duplicate_subscriber: :not_on_this_id
+      patient_not_found: :not_on_this_id, duplicate_subscriber: :not_on_this_id,
+      subscriber_not_in_plan: :not_on_this_id,
+      required_data_missing: :our_fault, input_errors: :our_fault, invalid_date_of_service: :our_fault,
+      date_out_of_range: :our_fault, date_of_death_conflict: :not_covered
     }.each do |reason, name|
       it "is #{name} WHEN the payer refuses the person as #{reason}" do
         finding = checked(rejections: [refusal(:subscriber, reason)]).finding(on: day)
@@ -122,51 +125,30 @@ RSpec.describe EdiGem::Finding do
     end
   end
 
-  describe "a discovery's, among its plans" do
-    def plan(*statuses) = EdiGem::FoundPlan.new(benefits: statuses.map { |status| line(status) }, people: [])
+  describe "a discovery's that found no plan" do
+    def searched(rejections: [], **response) = EdiGem::Response.new(benefits: [], rejections: rejections, **response)
 
-    def discovered(plans, rejections: [], **response)
-      EdiGem::Response.new(benefits: plans.flat_map(&:benefits), rejections: rejections, found_plans: plans,
-                           **response)
-    end
+    def finding_of(answer) = described_class.of_search(answer)
 
-    def finding_of(answer, plans = answer.found_plans) = answer.discovery_finding(on: day, plans: plans)
-
-    it "is covered WHEN any plan is active" do
-      expect(finding_of(discovered([plan(:inactive), plan(:active)]))).to be_covered
-    end
-
-    it "is the inactive plan's WHEN a plan is inactive and none active" do
-      expect(finding_of(discovered([plan(:non_covered), plan(:inactive)])))
-        .to have_attributes(name: :not_covered, inactive?: true)
-    end
-
-    it "is no_answer WHEN no plan says active or inactive, since a plan we could not read is no denial" do
-      expect(finding_of(discovered([plan(:non_covered)])).name).to eq :no_answer
-    end
-
-    it "lets a plan decide whatever refusals came with it" do
-      expect(finding_of(discovered([plan(:active)], rejections: [refusal(:payer, :payer_unavailable)]))).to be_covered
-    end
-
-    # The caller passes only the medical plans; a dental plan left out leaves nothing medical.
+    # A discovery with plans is read plan by plan (FoundPlan#finding), by the caller who chose them.
     {
       "not_covered WHEN the payer matched nobody" => [[], :not_covered],
       "not_covered WHEN the subscriber was not found" => [[%i[subscriber subscriber_not_found]], :not_covered],
       "provider_refused WHEN the payer refused our provider" => [[%i[provider provider_not_on_file]],
                                                                  :provider_refused],
       "our_fault WHEN the request was refused" => [[%i[envelope malformed_request]], :our_fault],
+      "our_fault WHEN what we sent was refused" => [[%i[subscriber required_data_missing]], :our_fault],
       "no_answer WHEN the payer did not answer" => [[%i[payer payer_unavailable]], :no_answer]
     }.each do |example, (refused, name)|
-      it "is #{example} and found nothing" do
-        answer = discovered([plan(:active)], rejections: refused.map { |args| refusal(*args) })
+      it "is #{example}" do
+        answer = searched(rejections: refused.map { |args| refusal(*args) }, settled: true, handle: "h")
 
-        expect(finding_of(answer, []).name).to eq name
+        expect(finding_of(answer).name).to eq name
       end
     end
 
     it "is pending WHEN the answer has not arrived" do
-      expect(finding_of(EdiGem::Response.new(benefits: [], rejections: [], handle: "discovery-0001"))).to be_pending
+      expect(finding_of(searched(handle: "discovery-0001"))).to be_pending
     end
 
     # A source can give the state with no refusal behind it.

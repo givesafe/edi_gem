@@ -19,6 +19,14 @@ module EdiGem
       BY_CODE[about_person.code] if about_person
     end
 
+    # The first refusal in the person's lanes that FINDINGS reads, as [finding name, code], or nil.
+    # Response::State and Finding both read a refusal through this, so the table is the one place a
+    # code's meaning is written.
+    def self.finding_among(rejections)
+      code = rejections.find { |rejection| LEVELS.include?(rejection.level) && FINDINGS.key?(rejection.code) }&.code
+      [FINDINGS[code], code] if code
+    end
+
     def initialize(reason:, fields:, mismatch:)
       @reason = reason
       @fields = fields
@@ -44,6 +52,24 @@ module EdiGem
       member_id_invalid: new(reason: :member_id_invalid, fields: %i[member_id], mismatch: false),
       subscriber_not_found: new(reason: :not_found, fields: [], mismatch: false),
       patient_not_found: new(reason: :not_found, fields: [], mismatch: false)
+    }.freeze
+
+    # What each refusal in the person's lanes (Codec::REJECT_REASON names) says the answer found:
+    #   held_differently  the ID is found, the person under another birth date (71, 58) or name (73, 65)
+    #   not_on_this_id    not on the payer's books under this ID: invalid (72, 64), not found (75, 67, 77),
+    #                     more than one match (76, 68), or not in this group or plan (78)
+    #   our_fault         what we sent: data missing (15), input errors (33), the day asked (56, 57, 62,
+    #                     63), or a birth date after the day asked (60). Fixed by us, not by asking again
+    #   not_covered       the person's date of death is before the day asked (61)
+    # A code outside the table leaves the answer to its other refusals and lines.
+    FINDINGS = {
+      date_of_birth_mismatch: :held_differently, name_mismatch: :held_differently,
+      member_id_invalid: :not_on_this_id, subscriber_not_found: :not_on_this_id,
+      patient_not_found: :not_on_this_id, duplicate_subscriber: :not_on_this_id,
+      subscriber_not_in_plan: :not_on_this_id,
+      required_data_missing: :our_fault, input_errors: :our_fault,
+      invalid_date_of_service: :our_fault, date_out_of_range: :our_fault,
+      date_of_death_conflict: :not_covered
     }.freeze
   end
 end

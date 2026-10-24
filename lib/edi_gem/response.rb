@@ -89,10 +89,6 @@ module EdiGem
       Identification.new(**found.to_h, refusal: PersonRefusal.among(@rejections), member_id_asked: true)
     end
 
-    # A discovery's Finding among `plans`, its medical plans (#medical_plans), each read on the
-    # day: a plan that came back decides, whatever refusals came with it (Finding.of_discovery).
-    def discovery_finding(on:, plans:) = Finding.of_discovery(self, plans, on: on)
-
     # The code of the first refusal, to record beside an answer that isn't one; nil when none. A
     # code the codec did not name is its raw string.
     def error_code = @rejections.first&.code&.to_s

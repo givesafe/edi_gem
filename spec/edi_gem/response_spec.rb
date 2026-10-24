@@ -50,11 +50,24 @@ RSpec.describe EdiGem::Response do
     describe "an answer that echoed the member and payer and sent no benefit line" do
       let(:echoed) { EdiGem::Benefit.new(member_id: "M1", payer_code: "KYMCD") }
 
-      it "is payer_silent WHEN a refusal came with it" do
+      it "is payer_silent WHEN a refusal came with it that says nothing of the person or our request" do
+        response = described_class.new(benefits: [echoed], rejections: [rejection(:subscriber, "AA")])
+
+        expect(response.state).to eq(:payer_silent)
+      end
+
+      it "is rejected WHEN the refusal is about what we sent" do
         response = described_class.new(benefits: [echoed],
                                        rejections: [rejection(:subscriber, :required_data_missing)])
 
-        expect(response.state).to eq(:payer_silent)
+        expect(response.state).to eq(:rejected)
+      end
+
+      it "is no_coverage WHEN the refusal says the person died before the day asked" do
+        response = described_class.new(benefits: [echoed],
+                                       rejections: [rejection(:subscriber, :date_of_death_conflict)])
+
+        expect(response.state).to eq(:no_coverage)
       end
 
       it "is no_coverage WHEN nothing was refused" do

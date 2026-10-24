@@ -340,7 +340,7 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   pending `Response`.
 - **Outcome.** A `Response`. `pending` with a `handle` when Stedi has not finished; call
   `resolve(handle)` later. Otherwise settled: `no_coverage` when Stedi found nothing. Read it with
-  `medical_plans(asked:)` and `discovery_finding(on:, plans:)`.
+  `medical_plans(asked:)`, each plan by its `finding(on:)`; with no plan, `Finding.of_search`.
 - **Effects.** `discovery` is one billed POST; `resolve` is a GET. The gem sends at most one
   discovery a second (a burst of 2), with a 130 s timeout. With `archive:`, each call writes under feature `discovery`: the
   POST writes a request and a response, and a GET writes a response only (`request_uri` nil).
@@ -380,18 +380,6 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   table above. `UnreadableBody` when the body is not a discovery request (`archived_question`) or
   not JSON. A source with no discovery raises `FeatureNotSupported`.
 - **Retry.** None in the gem. A caller may read again when `retryable?` is true. **(proposed)**
-
-### `keep_question(inquiry, archive:)` (proposed)
-
-- **Inputs.** An `Inquiry::Discovery`, and `archive: { name: "stem" }` as for `discovery`.
-- **Outcome.** The `request_uri` of the discovery request the inquiry would send, kept and never
-  sent. `archived_question` reads it back as it reads a request that was sent. A caller asking
-  again with new details compares them with an answer already paid for (`archived`), and a later
-  read can do the same.
-- **Effects.** One archive write, under feature `discovery_kept`, apart from the requests Stedi
-  was sent. Nothing is sent to Stedi, and nothing is billed.
-- **Failures.** `ArchiveNotConfigured` with no archive, and `ArgumentError` with no name. A source
-  with no discovery raises `FeatureNotSupported`.
 
 ### `MedicalPlan#payer_id` (proposed)
 
@@ -436,8 +424,6 @@ response.error_code        # => nil
   `identification` names. Its `finding(on:)` is the check's `Finding` on the day `on`.
 - `medical_plans(asked: nil)`: a discovery's `MedicalPlan`s. `asked` is the `Person::Asked`
   each plan is compared with.
-- `discovery_finding(on:, plans:)`: a discovery's `Finding` among `plans`, its
-  `medical_plans` (`Finding.of_discovery`).
 - `provider_standing`: what the answer says of our provider's standing with the payer.
   `:refused` when any refusal is about our provider (`provider_refusals`), whatever else came
   back; `:accepted` when the payer answered for it (`complete`, `partial` or `no_coverage`); nil
@@ -485,13 +471,13 @@ finding.to_s      # => "covered"
 | name | meaning |
 |---|---|
 | `covered` | an active line (EB01 `1` to `5`) covers the person on the day |
-| `not_covered` | an inactive line (`6` to `8`), not covered (`I`), the day outside the plan's dates, or an answer with no lines: not covered on this plan. They may have another |
+| `not_covered` | an inactive line (`6` to `8`), not covered (`I`), the day outside the plan's dates, a date of death before the day (`61`), or an answer with no lines: not covered on this plan. They may have another |
 | `someone_else` | the answer is about a person who isn't the one asked (our name and birth date comparison): the ID is real and someone's, and says nothing of our person |
 | `held_differently` | the payer found the ID but holds the person under another birth date (AAA `71`, `58`) or name (`73`, `65`). Not certainly someone else |
-| `not_on_this_id` | the person isn't on the payer's books under this ID: the ID invalid (`72`, `64`), not found (`75`, `67`, `77`) or more than one match (`76`, `68`). Not a denial |
+| `not_on_this_id` | the person isn't on the payer's books under this ID: the ID invalid (`72`, `64`), not found (`75`, `67`, `77`), more than one match (`76`, `68`), or not in this group or plan (`78`). Not a denial |
 | `provider_refused` | the payer won't answer our provider. Nothing about the person |
 | `no_answer` | the payer was silent, couldn't process (`V`), or no line decides |
-| `our_fault` | our request was refused at the transport or envelope: we didn't ask properly |
+| `our_fault` | our request was refused at the transport or envelope, or for what we sent in it (`15`, `33`, `56`, `57`, `60`, `62`, `63`): we didn't ask properly |
 | `pending` | an asynchronous answer that hasn't arrived |
 
 | field | type | values and presence |
@@ -509,10 +495,13 @@ Where a finding comes from:
 - `MedicalPlan#finding(on:)` (`Finding.of_coverage`): a plan a discovery found, always about the
   person the plan names, whoever was asked: `covered`, `not_covered` or `no_answer`. Whether that
   person is the one asked about is the plan's `identification`.
-- `Response#discovery_finding(on:, plans:)` (`Finding.of_discovery`): a discovery's, among its
-  medical plans. The first covered plan's, else the first inactive plan's, else `no_answer`: a
-  plan neither covered nor inactive is no denial. With no plan, the state decides: `pending`,
+- `Finding.of_search(response)`: a discovery that found no plan, by its state: `pending`,
   `provider_refused` or `our_fault` when refused, `no_answer` when silent, `not_covered` otherwise.
+  A discovery that found plans is read plan by plan; which plans decide is the caller's.
+
+The AAA codes in the person's lanes are read by one table, `PersonRefusal::FINDINGS`, which both
+the answer's state and its finding ask. A refusal of what we sent decides only when no line came
+with it; beside lines it refused part of the question (`partial`).
 
 A caller that records one word per answer derives it from the finding: `inactive?` tells a plan
 that ended from one never covered, and a refusal of the person (`held_differently`) is never a

@@ -5,9 +5,7 @@ module EdiGem
     # Which of Response::STATES an answer is in, read from its benefits and refusals.
     class State
       OUR_FAULT_LEVELS = %i[transport envelope].freeze
-      NOT_IDENTIFIED_CODES = %i[member_id_invalid name_mismatch subscriber_not_found
-                                patient_not_found date_of_birth_mismatch
-                                duplicate_subscriber].freeze
+      NOT_IDENTIFIED = %i[held_differently not_on_this_id].freeze
 
       def initialize(benefits:, rejections:, handle:, settled:)
         @benefits = benefits
@@ -21,9 +19,9 @@ module EdiGem
       def name
         return :pending if pending?
         return :rejected if rejected?
-        return :not_identified if not_identified?
-        return :payer_silent if payer_silent?
-        return :no_coverage if benefit_lines.empty?
+        return :not_identified if NOT_IDENTIFIED.include?(person_refusal)
+        return :payer_silent if rejections_at(:payer).any?
+        return without_lines if benefit_lines.empty?
         return :partial if @rejections.any?
 
         :complete
@@ -39,8 +37,13 @@ module EdiGem
         @rejections.any?(&:about_provider?) || our_request_refused?
       end
 
-      def payer_silent?
-        rejections_at(:payer).any? || (benefit_lines.empty? && @rejections.any?)
+      # With no line, a refusal in the person's lane decides (PersonRefusal::FINDINGS): what we sent
+      # is ours to fix, a death before the day is no coverage, and any other refusal is the payer's
+      # silence. Beside lines, the same refusal is about part of what was asked (partial).
+      def without_lines
+        return :no_coverage if @rejections.empty? || person_refusal == :not_covered
+
+        person_refusal == :our_fault ? :rejected : :payer_silent
       end
 
       def benefit_lines
@@ -51,10 +54,9 @@ module EdiGem
         @rejections.any? { |rejection| OUR_FAULT_LEVELS.include?(rejection.level) }
       end
 
-      # The patient may be the subscriber or a dependent of one; either one not found is the same.
-      def not_identified?
-        %i[subscriber dependent].flat_map { |level| rejections_at(level) }
-                                .any? { |rejection| NOT_IDENTIFIED_CODES.include?(rejection.code) }
+      # The patient may be the subscriber or a dependent of one; a refusal in either lane is the same.
+      def person_refusal
+        PersonRefusal.finding_among(@rejections)&.first
       end
 
       def rejections_at(level)

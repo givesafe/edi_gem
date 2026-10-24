@@ -484,26 +484,6 @@ RSpec.describe "calling Stedi" do
       expect { source.archived_question("file://#{@root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
     end
 
-    it "reads a question kept and never sent as one sent, and sends nothing (#keep_question)" do
-      source, transport = stedi_answering(archive: archive)
-      inquiry = EdiGem::Inquiry::Discovery.new(subscriber: given, provider: provider, as_of: Date.new(2026, 9, 1))
-      uri = source.keep_question(inquiry, archive: { name: "discovery-2" })
-      held = EdiGem::Person.new(role: :subscriber, address_line1: "1 EXAMPLE ST", postal_code: "40000",
-                                ssn: "XXX-XX-1234")
-
-      expect([transport.paths, source.archived_question(uri).person.given_fields(held)])
-        .to eq([[], { address: :matched, ssn_last_four: :matched }])
-      expect(uri).to include("/discovery_kept/request/discovery-2_")
-    end
-
-    it "refuses to keep a question WHEN no archive is configured" do
-      source, = stedi_answering
-      inquiry = EdiGem::Inquiry::Discovery.new(subscriber: given, provider: provider, as_of: Date.new(2026, 9, 1))
-
-      expect { source.keep_question(inquiry, archive: { name: "discovery-2" }) }
-        .to raise_error(EdiGem::ArchiveNotConfigured)
-    end
-
     it "refuses a uri the archive did not make, nil included" do
       source, = stedi_answering(archive: archive)
 

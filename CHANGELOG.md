@@ -6,22 +6,25 @@ The caller contract for each is in the README's "V1 reference".
 
 - `Response#provider_standing`: `:refused`, `:accepted` or nil, what an answer says of our
   provider's standing with the payer, so a caller never reads the refusals and the state for it.
-- `Response#checked_plan`, `#medical_plans(asked:)`, `#discovery_finding` and `#error_code`;
+- `Response#checked_plan`, `#medical_plans(asked:)` and `#error_code`;
   `EdiGem::CheckedPlan` and `EdiGem::MedicalPlan` (both `EdiGem::AnsweredPlan`). A caller reads a
   check or a discovery in coverage terms and never reads a benefit line's codes itself.
 - `EdiGem::Verdict`, `CheckedPlan#verdict` and `#verdict_code`, `Response#discovery_verdict` and
   `#reading` are removed: `Finding` holds the same meaning, and a caller derives its one word from
   it. `Finding#inactive?` and `#line_code` keep what the verdict kept apart (a plan that ended,
-  and the deciding line's code); `Finding.of_discovery` is a discovery's.
+  and the deciding line's code). `Finding.of_search` reads a discovery that found no plan; which
+  found plans decide a discovery is the caller's, so the gem has no discovery fold.
+- `PersonRefusal::FINDINGS`: what each refusal in the person's lanes says the answer found, read by
+  `Response::State` and `Finding` alike. Beyond the identity codes, `78` (not in this group or plan)
+  is `not_on_this_id`; what we sent (`15`, `33`, `56`, `57`, `60`, `62`, `63`) is `our_fault`, and
+  its answer `rejected` when no line came with it; a death before the day asked (`61`) is
+  `not_covered`.
 - `MedicalPlan#payer_id`: Stedi's payer ID for a plan's payer code, from Stedi's payer
   directory (`Source::Base#payers`, `#payer_id_for`; `EdiGem::ListedPayer`). One search per code
   for the source's lifetime; not billed.
 - `Source::Base#archived` (the common name for `archived_discovery`) and `#archived_question`,
   which reads a kept discovery request back as an `Inquiry::Question` (`Person::Asked` and the day
   asked about). `Inquiry::Discovery#question` builds the same from an inquiry.
-- `Source::Base#keep_question`: keeps a discovery request without sending it, under feature
-  `discovery_kept`, for `archived_question` to read back. A question asked again with new
-  details is compared with the answer already paid for.
 - `Identification#match`, `#mismatched?`, `#fields`, `#reason` and `#answered_as`, with the
   payer's refusal of the person (`EdiGem::PersonRefusal`) winning over our comparison.
 - `Identification#moved?`, reviewed with `Response#identify`, is removed: no caller reads it.

@@ -125,15 +125,6 @@ module EdiGem
         Request.question(Document::Json.parse(@archive.fetch(request_uri)))
       end
 
-      # Keeps a discovery request without sending it, and returns where (a Stored's request_uri), so a
-      # question asked again with new details can be compared with an answer already paid for
-      # (archived) and read back as one sent is (archived_question). Filed under Responses::KEPT, never
-      # as a request Stedi was sent. Nothing is sent, so nothing is billed. Raises ArchiveNotConfigured
-      # with no archive.
-      def keep_question(inquiry, archive:)
-        responses.keep_unsent(discovery_body(inquiry), url: @policy.path_for(:discovery), archive: archive)
-      end
-
       private
 
       def responses

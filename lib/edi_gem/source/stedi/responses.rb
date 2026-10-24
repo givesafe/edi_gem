@@ -14,9 +14,6 @@ module EdiGem
         ERROR = "ERROR"
         # Where a batch results item carries the identifier it was sent with.
         IDENTIFIER = "submitterTransactionIdentifier"
-        # The feature a request kept and never sent is filed under (Stedi#keep_question), apart from
-        # those Stedi was sent.
-        KEPT = :discovery_kept
 
         # `directory` is the source's payer directory, which each Response's plans ask for their
         # payer's ID.
@@ -39,14 +36,6 @@ module EdiGem
 
           raise ArgumentError, "archive: needs a name: to file the bodies under" if
             filing[:name].to_s.empty?
-        end
-
-        # Files a request `body` that is never sent, as the one `url` would have been sent, and returns
-        # where (a Stored's request_uri).
-        def keep_unsent(body, url:, archive:)
-          ensure_archivable(archive)
-          exchange = Exchange.new(method: :post, url: url, request_body: JSON.generate(body), started_at: Time.now)
-          kept(exchange, KEPT, archive).request_uri
         end
 
         # `body` is passed by calls whose answer carries a status (discovery); an eligibility
