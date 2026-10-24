@@ -199,6 +199,71 @@ who acts: `transport` and `envelope` (the request), `payer`, `provider` (the pro
 with the payer), `subscriber` and `dependent` (the person's identifiers). `retryable?` says
 whether the same request may succeed later.
 
+## What payers and Stedi return, and what the gem relies on (proposed)
+
+This is the source behind the rules: what an answer can be relied on to carry, and what is
+only seen in an example or not said. It is read from Stedi's insurance discovery docs
+([discovery](https://www.stedi.com/docs/healthcare/insurance-discovery),
+[overview](https://www.stedi.com/docs/healthcare/insurance-discovery-overview),
+[API reference](https://www.stedi.com/docs/healthcare/api-reference/post-insurance-discovery)),
+read Oct 22 2026. The pages carry no version or date, so a later version may differ.
+**Guarantee** means the reference says so, **example** that only an example shows it, and
+**open** that neither does.
+
+What a payer returns about a person:
+
+- **An address:** when the subscriber is the patient, the subscriber's address is returned,
+  at least the first line and the city. "ADDRESS UNKNOWN" is allowed when the payer has none
+  (X12 RFI 1934). The returned address "must match the request or be a previous address", so a
+  difference may be an old address. `postalCode` has no punctuation (guarantee); whether the
+  address is USPS-standardized is open. That's why `Address#compare` compares only the first
+  line's words and the first five postal digits.
+- **An SSN:** a payer must return an identifier only when it was sent and the payer used it to
+  find the person (X12 RFI 2119). An SSN that wasn't sent almost never comes back, and whether
+  one comes back whole, masked or at all is open. The gem keeps only its last four, as
+  `LastFour`, which never prints its digits.
+- **A dependent:** comes in the `dependent` part, with the policyholder's `memberId` on the
+  subscriber (guarantee). A payer may move the patient between the parts ("Dependents, and who
+  the payer answered about", above).
+
+How a Stedi discovery searches, and what it gives back:
+
+- **It searches on the demographics given,** "alongside its proprietary logic". "The more
+  information you provide, the more likely Stedi is to find matching coverage." Without the
+  state, it reaches only large national payers, so the backend sends the room's state with every
+  discovery. A full SSN is best; the last four "can help narrow down matching coverage".
+- **More than one item** "doesn't necessarily mean the patient has more than one active plan":
+  some national payers return every coverage on file, inactive included; dental and vision come
+  back too; matching is on demographics, so an item can be someone else's; and some extra
+  coverage is real (an MCO and the state's Medicaid often name each other).
+- **Matching is the caller's:** "false positives are possible, so you're ultimately responsible
+  for matching results to your own records." Names may vary; the birth date "must match exactly".
+  The gem compares the first name, last name and birth date (`Identity.compare`), and the address
+  and last four when given (`Identification#given_fields`).
+- **`confidence`** is `HIGH` or `REVIEW_NEEDED`, and the guide says every coverage is
+  `REVIEW_NEEDED`. The gem reads it; nothing relies on it.
+- **Which plan is primary** isn't said by a discovery. A coordination of benefits check does that.
+- **A polled result** has no copy of the request (guarantee, by its listed fields), and is kept
+  30 days. Only the archive holds what was asked.
+- **Codes 5, 7 and 8** (active pending investigation; inactive pending an eligibility update;
+  inactive pending investigation) are allowed on a discovery's benefit lines. Whether discovery
+  answers carry them is open.
+
+**What production discoveries returned.** 35 de-identified discovery answers, read Sep 20 2026
+by the gem, counted Oct 23. Counts only, nothing about any person:
+
+- Up to 5 plans per answer, 64 in all. UnitedHealthcare alone was 42 of them, mostly past
+  coverage.
+- Every plan carried an address with a ZIP. None carried an SSN, as RFI 2119 predicts for an
+  SSN that wasn't sent.
+- 3 plans came back in the dependent part.
+- 2 answers were about two different people (names or birth dates differ within one answer).
+- `confidence` was absent on every plan.
+- What each request carried (an address, an SSN) isn't in the corpus.
+
+Each open item is settled by an observed answer or by Stedi support. Until then the gem reports
+what doesn't hold as `not_returned` or `not_compared`, never as a match or a difference.
+
 ## V1 reference: what the backend calls
 
 This section is the caller contract for the calls the Samaritan backend makes. It covers
