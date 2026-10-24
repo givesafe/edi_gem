@@ -86,19 +86,19 @@ RSpec.describe EdiGem::CheckedPlan do
       expect(plan.status_on(day)).to eq :inactive
     end
 
-    it "is unknown WHEN the payer says only that the plan is not covered; the verdict says not_covered" do
+    it "is unknown WHEN the payer says only that the plan is not covered; the finding says not_covered" do
       benefits.replace([EdiGem::Benefit.new(status: :non_covered)])
 
-      expect([plan.status_on(day), plan.verdict(on: day)])
+      expect([plan.status_on(day), plan.finding(on: day).name])
         .to eq(%i[unknown not_covered])
     end
 
     context "WHEN the answer is about someone else" do
       let(:people) { [EdiGem::Person.new(role: :subscriber, **held, first_name: "OTHER")] }
 
-      it "is still the plan's, and the verdict is unanswered, never their coverage" do
-        expect([plan.status_on(day), plan.verdict(on: day)])
-          .to eq(%i[active unanswered])
+      it "is still the plan's, and the finding is someone_else, never their coverage" do
+        expect([plan.status_on(day), plan.finding(on: day).name])
+          .to eq(%i[active someone_else])
       end
     end
   end

@@ -89,11 +89,11 @@ module EdiGem
       Identification.new(**found.to_h, refusal: PersonRefusal.among(@rejections), member_id_asked: true)
     end
 
-    # A discovery's verdict among `plans`, its medical plans (#medical_plans), each read on the
-    # day: a plan that came back decides, whatever refusals came with it.
-    def discovery_verdict(on:, plans:) = reading.among(plans.map { |plan| plan.coverage_on(on) })
+    # A discovery's Finding among `plans`, its medical plans (#medical_plans), each read on the
+    # day: a plan that came back decides, whatever refusals came with it (Finding.of_discovery).
+    def discovery_finding(on:, plans:) = Finding.of_discovery(self, plans, on: on)
 
-    # The code of the first refusal, to record beside an unanswered verdict; nil when none. A
+    # The code of the first refusal, to record beside an answer that isn't one; nil when none. A
     # code the codec did not name is its raw string.
     def error_code = @rejections.first&.code&.to_s
 
@@ -129,11 +129,8 @@ module EdiGem
     def medical_plans(asked: nil) = MedicalPlan.all(@found_plans, directory: @directory, asked: asked)
 
     # A check's answer as the plan it is about (CheckedPlan), for the person `identification`
-    # names; its verdict is the check's (CheckedPlan#verdict).
+    # names; its finding is the check's (CheckedPlan#finding).
     def checked_plan(identification: nobody_compared) = CheckedPlan.new(self, identification: identification)
-
-    # The Verdict for this answer's state and refusals, which reads a plan's coverage.
-    def reading = Verdict.new(state, provider_refused: provider_refusals.any?)
 
     private
 

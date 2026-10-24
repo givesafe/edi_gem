@@ -82,22 +82,97 @@ RSpec.describe EdiGem::Finding do
     end
   end
 
-  # Verdict folds findings into one word to record. These are the folds callers can't undo from it.
-  describe "beside a check's verdict" do
-    other = { role: :subscriber, first_name: "OTHER", last_name: "PERSON", date_of_birth: "19700101" }
-    {
-      "someone_else" => [{ benefits: [[:active, "1"]], people: [other] }, :unanswered],
-      "held_differently" => [{ rejections: [%i[subscriber name_mismatch]] }, :unanswered],
-      "not_on_this_id" => [{ rejections: [%i[subscriber member_id_invalid]] }, :not_covered],
-      "our_fault" => [{ rejections: [%i[envelope input_errors]] }, :unanswered],
-      "no_answer" => [{ rejections: [%i[payer payer_unavailable]] }, :unanswered]
-    }.each do |name, (given, verdict)|
-      it "is #{name} where the verdict is #{verdict}" do
-        plan = checked(benefits: Array(given[:benefits]).map { |args| line(*args) },
-                       rejections: Array(given[:rejections]).map { |args| refusal(*args) },
-                       people: [EdiGem::Person.new(**(given[:people]&.first || { role: :subscriber, **held }))])
+  # A caller that records one word reads inactive? and line_code beside the name.
+  describe "a check's line" do
+    it "is inactive WHEN the line says inactive, with its code" do
+      finding = checked(benefits: [line(:inactive, "6")]).finding(on: day)
 
-        expect([plan.finding(on: day).name, plan.verdict(on: day)]).to eq [name.to_sym, verdict]
+      expect([finding.inactive?, finding.line_code]).to eq [true, "6"]
+    end
+
+    it "is inactive WHEN the plan's dates ended before the day, whatever the line's code says" do
+      ended = EdiGem::Benefit.new(status: :active, status_code: "1", service_types: ["30"], ends_on: "20260430")
+
+      expect(checked(benefits: [ended]).finding(on: day)).to have_attributes(name: :not_covered, inactive?: true,
+                                                                             line_code: nil)
+    end
+
+    it "is not inactive WHEN the line says not covered (I)" do
+      expect(checked(benefits: [line(:non_covered, "I")]).finding(on: day)).to_not be_inactive
+    end
+
+    it "is none WHEN the state decided, though status lines came with it" do
+      finding = checked(benefits: [line(:inactive, "6")], rejections: [refusal(:subscriber, :member_id_invalid)])
+                .finding(on: day)
+
+      expect([finding.name, finding.inactive?, finding.line_code]).to eq [:not_on_this_id, false, nil]
+    end
+
+    it "is none WHEN the answer is about someone else" do
+      other = EdiGem::Person.new(role: :subscriber, first_name: "OTHER", last_name: "PERSON", date_of_birth: "19700101")
+      finding = checked(benefits: [line(:inactive, "6")], people: [other]).finding(on: day)
+
+      expect([finding.inactive?, finding.line_code]).to eq [false, nil]
+    end
+
+    it "is none WHEN the payer is silent, though it named a code" do
+      finding = checked(rejections: [refusal(:payer, :payer_unavailable)]).finding(on: day)
+
+      expect([finding.code, finding.line_code]).to eq [:payer_unavailable, nil]
+    end
+  end
+
+  describe "a discovery's, among its plans" do
+    def plan(*statuses) = EdiGem::FoundPlan.new(benefits: statuses.map { |status| line(status) }, people: [])
+
+    def discovered(plans, rejections: [], **response)
+      EdiGem::Response.new(benefits: plans.flat_map(&:benefits), rejections: rejections, found_plans: plans,
+                           **response)
+    end
+
+    def finding_of(answer, plans = answer.found_plans) = answer.discovery_finding(on: day, plans: plans)
+
+    it "is covered WHEN any plan is active" do
+      expect(finding_of(discovered([plan(:inactive), plan(:active)]))).to be_covered
+    end
+
+    it "is the inactive plan's WHEN a plan is inactive and none active" do
+      expect(finding_of(discovered([plan(:non_covered), plan(:inactive)])))
+        .to have_attributes(name: :not_covered, inactive?: true)
+    end
+
+    it "is no_answer WHEN no plan says active or inactive, since a plan we could not read is no denial" do
+      expect(finding_of(discovered([plan(:non_covered)])).name).to eq :no_answer
+    end
+
+    it "lets a plan decide whatever refusals came with it" do
+      expect(finding_of(discovered([plan(:active)], rejections: [refusal(:payer, :payer_unavailable)]))).to be_covered
+    end
+
+    # The caller passes only the medical plans; a dental plan left out leaves nothing medical.
+    {
+      "not_covered WHEN the payer matched nobody" => [[], :not_covered],
+      "not_covered WHEN the subscriber was not found" => [[%i[subscriber subscriber_not_found]], :not_covered],
+      "provider_refused WHEN the payer refused our provider" => [[%i[provider provider_not_on_file]],
+                                                                 :provider_refused],
+      "our_fault WHEN the request was refused" => [[%i[envelope malformed_request]], :our_fault],
+      "no_answer WHEN the payer did not answer" => [[%i[payer payer_unavailable]], :no_answer]
+    }.each do |example, (refused, name)|
+      it "is #{example} and found nothing" do
+        answer = discovered([plan(:active)], rejections: refused.map { |args| refusal(*args) })
+
+        expect(finding_of(answer, []).name).to eq name
+      end
+    end
+
+    it "is pending WHEN the answer has not arrived" do
+      expect(finding_of(EdiGem::Response.new(benefits: [], rejections: [], handle: "discovery-0001"))).to be_pending
+    end
+
+    # A source can give the state with no refusal behind it.
+    { payer_silent: :no_answer, rejected: :our_fault }.each do |state, name|
+      it "is #{name} with no code WHEN the source gave the state #{state} and no refusal" do
+        expect(finding_of(EdiGem::Response.new(state: state))).to have_attributes(name: name, code: nil)
       end
     end
   end
@@ -116,6 +191,11 @@ RSpec.describe EdiGem::Finding do
     it "is no_answer WHEN no line decides" do
       expect(found.finding(on: day)).to be_no_answer
     end
+  end
+
+  it "inspects as its name, with its code when it has one" do
+    expect([described_class.new(:pending).inspect, described_class.new(:covered, code: "1").inspect])
+      .to eq ["#<EdiGem::Finding pending>", "#<EdiGem::Finding covered code=1>"]
   end
 
   it "is no name outside the list" do

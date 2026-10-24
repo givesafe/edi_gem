@@ -321,7 +321,7 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   body. `archive:` is nil, or `{ name: "stem" }` plus a value for each placeholder the template
   leaves to the caller.
 - **Outcome.** A settled `Response` (never `pending`). Read it with `identify` and
-  `checked_plan`, whose `verdict` and `verdict_code` are the check's.
+  `checked_plan`, whose `finding(on:)` is the check's.
 - **Effects.** One billed POST to Stedi. With `archive:`, the request body (credential fields
   redacted) and the response body are written under feature `eligibility_check`, and
   `response.stored` says where.
@@ -340,7 +340,7 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   pending `Response`.
 - **Outcome.** A `Response`. `pending` with a `handle` when Stedi has not finished; call
   `resolve(handle)` later. Otherwise settled: `no_coverage` when Stedi found nothing. Read it with
-  `medical_plans(asked:)` and `discovery_verdict(on:, plans:)`.
+  `medical_plans(asked:)` and `discovery_finding(on:, plans:)`.
 - **Effects.** `discovery` is one billed POST; `resolve` is a GET. The gem sends at most one
   discovery a second (a burst of 2), with a 130 s timeout. With `archive:`, each call writes under feature `discovery`: the
   POST writes a request and a response, and a GET writes a response only (`request_uri` nil).
@@ -433,35 +433,16 @@ response.error_code        # => nil
 - `identify(asked, as_dependent: false)`: an `Identification` for a check's people. `asked` is a
   hash of `first_name`, `last_name` and `date_of_birth`.
 - `checked_plan(identification:)`: the check's plan, as a `CheckedPlan`, for the person
-  `identification` names. Its `verdict(on:)` is a verdict name for the check on the day `on`;
-  its `verdict_code(on:)` the EB01 code behind that verdict, or nil.
+  `identification` names. Its `finding(on:)` is the check's `Finding` on the day `on`.
 - `medical_plans(asked: nil)`: a discovery's `MedicalPlan`s. `asked` is the `Person::Asked`
   each plan is compared with.
-- `discovery_verdict(on:, plans:)`: a verdict name for a discovery among `plans`, its
-  `medical_plans`.
-- `reading`: the `Verdict` for this answer's state and refusals, which reads a plan's coverage
-  (`of_plan`, `code_of`, `among`). `CheckedPlan#verdict` and `#discovery_verdict` read through it.
+- `discovery_finding(on:, plans:)`: a discovery's `Finding` among `plans`, its
+  `medical_plans` (`Finding.of_discovery`).
 - `provider_standing`: what the answer says of our provider's standing with the payer.
   `:refused` when any refusal is about our provider (`provider_refusals`), whatever else came
   back; `:accepted` when the payer answered for it (`complete`, `partial` or `no_coverage`); nil
   when it did neither (`payer_silent`, `not_identified`, `pending`, or `rejected` for a reason
   that is not our provider).
-
-### Verdict names (proposed)
-
-`EdiGem::Verdict::NAMES` lists them, so a caller can check it records every one. `CheckedPlan#verdict`
-and `Response#discovery_verdict` give one of these names, the one word to record for an answer:
-
-| name | meaning |
-|---|---|
-| `active` | the plan covers the person on the day asked about |
-| `inactive` | the plan does not cover them that day |
-| `not_covered` | the payer answered and found no coverage |
-| `unanswered` | the payer did not say, or answered about someone else |
-| `provider_refused` | the payer refused our provider; fix that before asking again |
-| `pending` | an asynchronous answer that has not arrived |
-
-An error is never a lapse: whatever the payer did not say is `unanswered`.
 
 ### `Coverage` and its `Finding`
 
@@ -517,6 +498,8 @@ finding.to_s      # => "covered"
 |---|---|---|
 | `name` | Symbol | one of `NAMES`; each has a predicate (`covered?`, `not_on_this_id?`, ...) |
 | `code` | String, Symbol or nil | the EB01 code of the line that decided; for a refusal, its reason (a `Codec::REJECT_REASON` name, or the raw code the codec didn't name); nil otherwise |
+| `inactive?` | Boolean | whether the plan's own lines say it is inactive on the day (`6` to `8`, or the day outside the plan's dates): a `not_covered` that was covered and no longer is. False when no line decided |
+| `line_code` | String or nil | the EB01 code of the line that decided, to record beside the finding; nil when the state, a refusal or the person decided, or the plan's dates or an implied term did |
 
 Where a finding comes from:
 
@@ -526,8 +509,14 @@ Where a finding comes from:
 - `MedicalPlan#finding(on:)` (`Finding.of_coverage`): a plan a discovery found, always about the
   person the plan names, whoever was asked: `covered`, `not_covered` or `no_answer`. Whether that
   person is the one asked about is the plan's `identification`.
+- `Response#discovery_finding(on:, plans:)` (`Finding.of_discovery`): a discovery's, among its
+  medical plans. The first covered plan's, else the first inactive plan's, else `no_answer`: a
+  plan neither covered nor inactive is no denial. With no plan, the state decides: `pending`,
+  `provider_refused` or `our_fault` when refused, `no_answer` when silent, `not_covered` otherwise.
 
-`Verdict`, which folds several of these into one word to record, reads the same answers.
+A caller that records one word per answer derives it from the finding: `inactive?` tells a plan
+that ended from one never covered, and a refusal of the person (`held_differently`) is never a
+denial. An error is never a lapse.
 
 **A name the payer corrected.** When the payer says it corrected the identity it was sent
 (`Person#identity_corrected?`, `001` with `25`) and the birth date matched, a first or last name
@@ -564,8 +553,8 @@ plan.identification.match            # => :matched
 | `identification` | `Identification` | who the payer answered about, compared with who was asked |
 | `lines` | Array of `AnsweredPlan::Line` | `benefit_type`, `service_types`, `insurance_type`, `plan_name`, `in_network` (nil when the payer did not say); empty when none |
 
-A `CheckedPlan` also has `verdict(on:)` and `verdict_code(on:)` (Readers, above), which weigh
-who the payer answered about. A `MedicalPlan` also has `payer_id` (above), `person` (whose
+A `CheckedPlan` also has `finding(on:)` (Readers, above), which weighs who the payer answered
+about. A `MedicalPlan` also has `payer_id` (above), `person` (whose
 `address` is the one the payer holds) and `benefits`. Dental and vision plans are not medical
 plans. A Medicaid plan another plan names as its primary payer is
 part of that plan, not a plan of its own.

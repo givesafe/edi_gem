@@ -13,8 +13,8 @@ module EdiGem
   #   group_number     the employer or group number, or nil when the answer holds none
   #   status_on(date)  what the plan's own lines say of that day (Coverage's two-part test):
   #                    :active, :inactive, or :unknown when they say neither. Not knowing is not
-  #                    a denial. It does not weigh who the payer answered about: a check's verdict,
-  #                    which does, is CheckedPlan#verdict
+  #                    a denial. It does not weigh who the payer answered about: a check's finding,
+  #                    which does, is CheckedPlan#finding
   #   relationship     :self or :dependent, as the payer said; nil when it did not say, nobody
   #                    was compared, or the payer refused the person
   #   identification   who the payer answered about, compared with who was asked (Identification).

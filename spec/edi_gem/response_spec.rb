@@ -102,6 +102,21 @@ RSpec.describe EdiGem::Response do
     end
   end
 
+  describe "#error_code" do
+    it "is the first refusal's code" do
+      expect(described_class.new(rejections: [rejection(:payer, :payer_unavailable)]).error_code)
+        .to eq("payer_unavailable")
+    end
+
+    it "is nil when nothing was refused" do
+      expect(described_class.new.error_code).to be_nil
+    end
+
+    it "is a code the codec did not name as its raw string" do
+      expect(described_class.new(rejections: [rejection(:payer, "99")]).error_code).to eq("99")
+    end
+  end
+
   describe "#provider_refusals" do
     it "holds the refusals about our standing, from any lane" do
       in_subscriber_lane = rejection(:subscriber, :provider_not_on_file)

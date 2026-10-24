@@ -6,10 +6,13 @@ The caller contract for each is in the README's "V1 reference".
 
 - `Response#provider_standing`: `:refused`, `:accepted` or nil, what an answer says of our
   provider's standing with the payer, so a caller never reads the refusals and the state for it.
-- `Response#checked_plan`, `#medical_plans(asked:)`, `#discovery_verdict` and `#error_code`;
-  `CheckedPlan#verdict` and `#verdict_code`; `EdiGem::CheckedPlan`, `EdiGem::MedicalPlan` (both
-  `EdiGem::AnsweredPlan`) and `EdiGem::Verdict`. A caller reads a check or a discovery in coverage
-  terms and never reads a benefit line's codes itself.
+- `Response#checked_plan`, `#medical_plans(asked:)`, `#discovery_finding` and `#error_code`;
+  `EdiGem::CheckedPlan` and `EdiGem::MedicalPlan` (both `EdiGem::AnsweredPlan`). A caller reads a
+  check or a discovery in coverage terms and never reads a benefit line's codes itself.
+- `EdiGem::Verdict`, `CheckedPlan#verdict` and `#verdict_code`, `Response#discovery_verdict` and
+  `#reading` are removed: `Finding` holds the same meaning, and a caller derives its one word from
+  it. `Finding#inactive?` and `#line_code` keep what the verdict kept apart (a plan that ended,
+  and the deciding line's code); `Finding.of_discovery` is a discovery's.
 - `MedicalPlan#payer_id`: Stedi's payer ID for a plan's payer code, from Stedi's payer
   directory (`Source::Base#payers`, `#payer_id_for`; `EdiGem::ListedPayer`). One search per code
   for the source's lifetime; not billed.

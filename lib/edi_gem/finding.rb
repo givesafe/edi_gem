@@ -19,7 +19,8 @@ module EdiGem
   #   our_fault         our request was refused at the transport or envelope: we didn't ask properly
   #   pending           an asynchronous answer that hasn't arrived
   #
-  # Verdict, which folds several of these into one word to record, reads the same answers.
+  # A finding a plan's own line decided keeps that line (#line_code, #inactive?), so a caller that
+  # records one word can tell a plan that ended from one never covered.
   class Finding
     NAMES = %i[covered not_covered someone_else held_differently not_on_this_id provider_refused
                no_answer our_fault pending].freeze
@@ -36,7 +37,17 @@ module EdiGem
     # A plan's coverage on the day (a Coverage::Finding), as a discovery reads each plan it found:
     # always about the person the plan names, whoever was asked.
     def self.of_coverage(coverage)
-      new(BY_COVERAGE.fetch(coverage.status, :no_answer), code: coverage.code)
+      new(BY_COVERAGE.fetch(coverage.status, :no_answer), code: coverage.code, line: coverage)
+    end
+
+    # A discovery's answer among `plans`, its medical plans, each read on the day: the best any plan
+    # found, where a plan neither covered nor inactive is no denial. With no plan, the state decides,
+    # and an answer that names none found none.
+    def self.of_discovery(response, plans, on:)
+      found = plans.map { |plan| plan.finding(on: on) }
+      return of_search(response) if found.empty?
+
+      found.find(&:covered?) || found.find(&:inactive?) || new(:no_answer)
     end
 
     # A check's answer (`response`) about the person `identification` names, on the day.
@@ -45,10 +56,23 @@ module EdiGem
       when :pending then new(:pending)
       when :rejected then refused(response)
       when :not_identified then not_identified(response)
-      when :payer_silent then new(:no_answer, code: response.rejections.first&.code)
+      when :payer_silent then silent(response)
       else answered(response, identification, on)
       end
     end
+
+    # A discovery's answer that found no plan, by its state.
+    def self.of_search(response)
+      case response.state
+      when :pending then new(:pending)
+      when :rejected then refused(response)
+      when :payer_silent then silent(response)
+      else new(:not_covered)
+      end
+    end
+
+    # A source can give the state with no refusal behind it.
+    def self.silent(response) = new(:no_answer, code: response.rejections.first&.code)
 
     def self.refused(response)
       refusal = response.provider_refusals.first
@@ -70,18 +94,29 @@ module EdiGem
       of_coverage(response.coverage_on(day))
     end
 
-    private_class_method :refused, :not_identified, :answered
+    private_class_method :of_search, :silent, :refused, :not_identified, :answered
 
     # `code` is the EB01 status code of the line that decided, the refusal's reason (a
-    # Codec::REJECT_REASON name, or the raw code the codec didn't name), or nil.
-    def initialize(name, code: nil)
+    # Codec::REJECT_REASON name, or the raw code the codec didn't name), or nil. `line` is the plan's
+    # coverage on the day (a Coverage::Finding) when it decided; nil when the state or the person did.
+    def initialize(name, code: nil, line: nil)
       raise ArgumentError, "unknown finding #{name}" unless NAMES.include?(name)
 
       @name = name
       @code = code
+      @line = line
     end
 
     NAMES.each { |one| define_method(:"#{one}?") { @name == one } }
+
+    # Whether the plan's own lines say it is inactive on the day (EB01 6 to 8, or the day outside the
+    # plan's dates): not covered as one who was and no longer is, rather than never covered (I) or no
+    # lines at all.
+    def inactive? = @line&.inactive? || false
+
+    # The EB01 status code of the line that decided, to record beside the finding; nil when no line
+    # did (the state, a refusal or the person decided), or the plan's dates or an implied term did.
+    def line_code = @line&.code
 
     def to_s = @name.to_s
 
