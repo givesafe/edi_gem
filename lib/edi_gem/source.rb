@@ -85,6 +85,12 @@ module EdiGem
         unsupported(:discovery)
       end
 
+      # Keeps a discovery request without sending it. Returns the request's uri, which
+      # archived_question reads.
+      def keep_question(_inquiry, archive:)
+        unsupported(:discovery)
+      end
+
       # Submits many eligibility checks as one batch. `inquiries` is a Hash of the caller's
       # identifier => Inquiry::Eligibility; an Array is keyed by position. Returns a
       # Batch::Submission.

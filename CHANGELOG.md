@@ -16,6 +16,9 @@ The caller contract for each is in the README's "V1 reference".
 - `Source::Base#archived` (the common name for `archived_discovery`) and `#archived_question`,
   which reads a kept discovery request back as an `Inquiry::Question` (`Person::Asked` and the day
   asked about). `Inquiry::Discovery#question` builds the same from an inquiry.
+- `Source::Base#keep_question`: keeps a discovery request without sending it, under feature
+  `discovery_kept`, for `archived_question` to read back. A question asked again with new
+  details is compared with the answer already paid for.
 - `Identification#match`, `#mismatched?`, `#fields`, `#reason` and `#answered_as`, with the
   payer's refusal of the person (`EdiGem::PersonRefusal`) winning over our comparison.
 - `Identification#moved?`, reviewed with `Response#identify`, is removed: no caller reads it.

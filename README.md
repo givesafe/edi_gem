@@ -381,6 +381,18 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   not JSON. A source with no discovery raises `FeatureNotSupported`.
 - **Retry.** None in the gem. A caller may read again when `retryable?` is true. **(proposed)**
 
+### `keep_question(inquiry, archive:)` (proposed)
+
+- **Inputs.** An `Inquiry::Discovery`, and `archive: { name: "stem" }` as for `discovery`.
+- **Outcome.** The `request_uri` of the discovery request the inquiry would send, kept and never
+  sent. `archived_question` reads it back as it reads a request that was sent. A caller asking
+  again with new details compares them with an answer already paid for (`archived`), and a later
+  read can do the same.
+- **Effects.** One archive write, under feature `discovery_kept`, apart from the requests Stedi
+  was sent. Nothing is sent to Stedi, and nothing is billed.
+- **Failures.** `ArchiveNotConfigured` with no archive, and `ArgumentError` with no name. A source
+  with no discovery raises `FeatureNotSupported`.
+
 ### `MedicalPlan#payer_id` (proposed)
 
 - **Input.** None. It reads the plan's `payer_code`.
