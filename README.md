@@ -409,6 +409,54 @@ pending codes), or nil. It takes a stored code as well as a finding's.
 
 The words a record shows for a code (its "context") are the backend's, not the gem's.
 
+### `Finding`: what the answer established (proposed)
+
+`EdiGem::Finding` is what an answer established about the person asked about, asked the way they
+were asked: one name, and the code behind it. It is the meaning only. What to do with it is the
+caller's, and depends on the moment (a check with the person there, a recheck without them, a
+discovery). `Finding::NAMES` lists the names, so a caller can check it handles every one.
+
+```ruby
+finding = plan.finding(on: Date.new(2026, 10, 22))
+finding.name      # => :covered
+finding.code      # => "1"
+finding.covered?  # => true
+finding.to_s      # => "covered"
+```
+
+| name | meaning |
+|---|---|
+| `covered` | an active line (EB01 `1` to `5`) covers the person on the day |
+| `not_covered` | an inactive line (`6` to `8`), not covered (`I`), the day outside the plan's dates, or an answer with no lines: not covered on this plan. They may have another |
+| `someone_else` | the answer is about a person who isn't the one asked (our name and birth date comparison): the ID is real and someone's, and says nothing of our person |
+| `held_differently` | the payer found the ID but holds the person under another birth date (AAA `71`, `58`) or name (`73`, `65`). Not certainly someone else |
+| `not_on_this_id` | the person isn't on the payer's books under this ID: the ID invalid (`72`, `64`), not found (`75`, `67`, `77`) or more than one match (`76`, `68`). Not a denial |
+| `provider_refused` | the payer won't answer our provider. Nothing about the person |
+| `no_answer` | the payer was silent, couldn't process (`V`), or no line decides |
+| `our_fault` | our request was refused at the transport or envelope: we didn't ask properly |
+| `pending` | an asynchronous answer that hasn't arrived |
+
+| field | type | values and presence |
+|---|---|---|
+| `name` | Symbol | one of `NAMES`; each has a predicate (`covered?`, `not_on_this_id?`, ...) |
+| `code` | String, Symbol or nil | the EB01 code of the line that decided; for a refusal, its reason (a `Codec::REJECT_REASON` name, or the raw code the codec didn't name); nil otherwise |
+
+Where a finding comes from:
+
+- `CheckedPlan#finding(on:)` (`Finding.of_check`): a check's answer about the person its
+  `identification` names. The answer's state decides first (pending, refused, not identified,
+  silent); then an answer about someone else is `someone_else`, and otherwise the coverage on the day.
+- `MedicalPlan#finding(on:)` (`Finding.of_coverage`): a plan a discovery found, always about the
+  person the plan names, whoever was asked: `covered`, `not_covered` or `no_answer`. Whether that
+  person is the one asked about is the plan's `identification`.
+
+`Verdict`, which folds several of these into one word to record, reads the same answers.
+
+**A name the payer corrected.** When the payer says it corrected the identity it was sent
+(`Person#identity_corrected?`, `001` with `25`) and the birth date matched, a first or last name
+that differs counts as matched. `Identity::Result#corrected` names the fields that passed only that
+way (empty otherwise), so a caller can show them as corrected rather than matched.
+
 ### Plans: `CheckedPlan` and `MedicalPlan` (proposed)
 
 A check's answer (`Response#checked_plan`) and each medical plan a discovery found
