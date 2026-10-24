@@ -39,6 +39,10 @@ module EdiGem
       coverage ? @response.reading.of_plan(coverage) : :unanswered
     end
 
+    # What the answer established about the person asked about, on the day (a Finding): the
+    # meaning #verdict folds into one word to record.
+    def finding(on:) = Finding.of_check(@response, @identification, on: on)
+
     # The status code of the benefit line that decided #verdict (Coverage::Finding#code), to record
     # beside it; nil when no line decided it: an unanswered state, or an answer about someone else.
     def verdict_code(on:)

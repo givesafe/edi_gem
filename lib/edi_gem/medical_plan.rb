@@ -81,6 +81,9 @@ module EdiGem
     # Coverage's finding for the plan's own lines on this day.
     def coverage_on(date) = @found_plan.coverage_on(date)
 
+    # The found plan's (FoundPlan#finding).
+    def finding(on:) = @found_plan.finding(on: on)
+
     def concealed_inspect
       "#<#{self.class} #{@found_plan.inspect} medicaid=#{!@medicaid_plan.nil?}>"
     end

@@ -63,6 +63,10 @@ module EdiGem
       Coverage.on(@benefits, date)
     end
 
+    # What the plan's lines say of the person it names on this day (a Finding): covered,
+    # not_covered or no_answer. Whether that person is the one asked about is #identify's.
+    def finding(on:) = Finding.of_coverage(coverage_on(on))
+
     def concealed_inspect
       "#<#{self.class} benefits=#{@benefits.size} people=#{@people.map(&:role).join(",")}>"
     end
