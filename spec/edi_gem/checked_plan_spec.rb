@@ -7,13 +7,12 @@ require_relative "../support/plan_date_forms"
 # BatchPoll examples. Every value here is made up.
 RSpec.describe EdiGem::CheckedPlan do
   let(:day) { Date.new(2026, 6, 1) }
-  let(:asked) { { first_name: "Testfirst", last_name: "Testlast", date_of_birth: Date.new(1980, 1, 1) } }
-  let(:held) { { first_name: "TESTFIRST", last_name: "TESTLAST", date_of_birth: "19800101" } }
   let(:benefits) { [EdiGem::Benefit.new(status: :active, benefit_type: nil, plan_name: "EXAMPLE PLAN")] }
-  let(:people) { [] }
-  let(:rejections) { [] }
-  let(:response) { EdiGem::Response.new(benefits: benefits, people: people, rejections: rejections) }
-  let(:plan) { response.checked_plan(identification: response.identify(asked)) }
+  let(:response) { EdiGem::Response.new(benefits: benefits) }
+  # Who the caller read the answer to be about: the part the person came back in, and the match.
+  let(:reading) { Struct.new(:answered_as, :match) }
+  let(:answered_as) { nil }
+  let(:plan) { response.checked_plan(identification: reading.new(answered_as, :matched)) }
 
   describe "the plan's name and number" do
     it "is the active line's" do
@@ -55,23 +54,20 @@ RSpec.describe EdiGem::CheckedPlan do
   end
 
   describe "#relationship" do
-    it "is nil WHEN the payer gave nobody to compare; the app's own fallback is the app's" do
+    it "is nil WHEN the caller read nobody; the app's own fallback is the app's" do
       expect(plan.relationship).to be_nil
     end
 
-    context "WHEN the payer answered about the person as a dependent" do
-      let(:people) do
-        [EdiGem::Person.new(role: :subscriber, first_name: "OTHER", last_name: "TESTLAST", date_of_birth: "19700101"),
-         EdiGem::Person.new(role: :dependent, **held)]
-      end
+    context "WHEN the caller read the answer as about the person as a dependent" do
+      let(:answered_as) { :dependent }
 
-      it "is dependent, and the person matched" do
-        expect([plan.relationship, plan.identification.match]).to eq(%i[dependent matched])
+      it "is dependent" do
+        expect(plan.relationship).to eq :dependent
       end
     end
 
-    context "WHEN the payer answered about the person as the policyholder" do
-      let(:people) { [EdiGem::Person.new(role: :subscriber, **held)] }
+    context "WHEN the caller read the answer as about the person as the policyholder" do
+      let(:answered_as) { :subscriber }
 
       it "is self" do
         expect(plan.relationship).to eq :self
@@ -86,20 +82,10 @@ RSpec.describe EdiGem::CheckedPlan do
       expect(plan.status_on(day)).to eq :inactive
     end
 
-    it "is unknown WHEN the payer says only that the plan is not covered; the finding says not_covered" do
+    it "is unknown WHEN the payer says only that the plan is not covered" do
       benefits.replace([EdiGem::Benefit.new(status: :non_covered)])
 
-      expect([plan.status_on(day), plan.finding(on: day).name])
-        .to eq(%i[unknown not_covered])
-    end
-
-    context "WHEN the answer is about someone else" do
-      let(:people) { [EdiGem::Person.new(role: :subscriber, **held, first_name: "OTHER")] }
-
-      it "is still the plan's, and the finding is someone_else, never their coverage" do
-        expect([plan.status_on(day), plan.finding(on: day).name])
-          .to eq(%i[active someone_else])
-      end
+      expect(plan.status_on(day)).to eq :unknown
     end
   end
 
@@ -110,7 +96,7 @@ RSpec.describe EdiGem::CheckedPlan do
         payer_code: "77027", provider: EdiGem::Provider.new(npi: "1999999984", organization_name: "EXAMPLECLINIC"),
         subscriber: EdiGem::Subscriber.new(member_id: "MOCK00000001", last_name: "Testlast")
       )
-      source.eligibility(inquiry).checked_plan
+      source.eligibility(inquiry).checked_plan(identification: reading.new(nil, :not_compared))
     end
 
     it "reads the plan the payer named" do
@@ -131,7 +117,9 @@ RSpec.describe EdiGem::CheckedPlan do
     it "are Dates, whichever identification the plan is read with" do
       benefits << EdiGem::Benefit.new(plan_begins_on: "20260101", plan_ends_on: "20261231")
 
-      expect([plan.plan_begins_on, plan.plan_ends_on, response.checked_plan.plan_begins_on])
+      other = response.checked_plan(identification: reading.new(:dependent, :mismatched))
+
+      expect([plan.plan_begins_on, plan.plan_ends_on, other.plan_begins_on])
         .to eq([Date.new(2026, 1, 1), Date.new(2026, 12, 31), Date.new(2026, 1, 1)])
     end
 
@@ -153,14 +141,10 @@ RSpec.describe EdiGem::CheckedPlan do
           subscriber: EdiGem::Subscriber.new(member_id: "MOCK00000001", last_name: "Testlast",
                                              date_of_birth: "19800101")
         )
-        checked = source.eligibility(inquiry).checked_plan
+        checked = source.eligibility(inquiry).checked_plan(identification: reading.new(nil, :not_compared))
 
         expect([checked.plan_begins_on, checked.plan_ends_on]).to eq(expected)
       end
     end
-  end
-
-  it "carries no given details, since a check sends no address or SSN" do
-    expect(plan.identification.given_fields).to eq({})
   end
 end

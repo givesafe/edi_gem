@@ -1,134 +1,125 @@
 # frozen_string_literal: true
 
 module EdiGem
-  # Whether the person a payer answered about is the person asked about, field by field.
-  #
-  # Payers spell names their own way: some uppercase, drop accents, hyphens and suffixes, or cut a
-  # long name short, and only CORE-certified payers follow CAQH CORE 258's normalization. So names
-  # are compared after normalizing both sides, and a few spellings of the same name pass. A name
-  # that is another name (Leo and Leon, Aiden and Jaden), a nickname, or first and last swapped
-  # does not: a one-letter difference is how twins and siblings differ. The birth date must be
-  # exact.
+  # The forms of a person's name the gem and its callers share: as every request sends it to a
+  # payer, as its words, and as it says who someone is. Payers spell names their own way (some
+  # uppercase, drop accents, hyphens and suffixes, or cut a long name short), and only
+  # CORE-certified payers follow CAQH CORE 258's normalization, so a caller that compares a payer's
+  # spelling with its own starts from these forms. How two names compare is the caller's.
   module Identity
-    # CORE 258's suffixes and titles, dropped from a last name before comparing.
-    SUFFIXES = %w[JR SR I II III IV V RN MD MR MS DR MRS PHD REV ESQ].freeze
+    # Generation suffixes. Stedi takes one in its own suffix field rather than in the last name, and
+    # one says who someone is: a JR is another person than his father.
+    SUFFIXES = %w[JR SR I II III IV V].freeze
+    # Titles and degrees. They are not sent, and they don't count when comparing.
+    TITLES = %w[RN MD MR MS DR MRS PHD REV ESQ].freeze
+    # The characters Stedi refuses in a request, removed from every name sent.
+    UNSENDABLE = /[~*:^>]/
+    # Whether a word is a title, written with or without its period or comma.
+    TITLE = ->(word) { TITLES.include?(bare(word)) }
 
     # The shortest name a payer is taken to have cut short. Below it, a prefix is too likely to be
-    # another name (LEO is the start of LEONARD).
+    # another name (LEO is the start of LEONARD). The mock source cuts first names to it.
     TRUNCATED_AT = 8
 
+    # The fields that say who a person is.
     FIELDS = %i[first_name last_name date_of_birth].freeze
-    NAME_RULES = { first_name: :same_first?, last_name: :same_last? }.freeze
 
     # Characters with no decomposed form, spelled as payers write them.
     LETTERS = { "ß" => "SS", "Æ" => "AE", "æ" => "AE", "Œ" => "OE", "œ" => "OE", "Ø" => "O",
                 "ø" => "O", "Ł" => "L", "ł" => "L", "Đ" => "D", "đ" => "D", "Þ" => "TH",
                 "þ" => "TH" }.freeze
+    # The other way an accented letter is written, beside the one payer_normalized sends (its accent
+    # dropped, or LETTERS): Ü written out as UE, Đ as J. Stedi sends a letter one way and the payer's
+    # record may hold the other, so a name refused as sent may be held this way.
+    ANOTHER_SPELLING = { "Ä" => "AE", "ä" => "ae", "Ö" => "OE", "ö" => "oe", "Ü" => "UE", "ü" => "ue",
+                         "Å" => "AA", "å" => "aa", "Ø" => "OE", "ø" => "oe", "Đ" => "J", "đ" => "j" }.freeze
     MARKS = /\p{Mn}/
     LETTER = Regexp.union(LETTERS.keys)
 
-    # One field's result: matched, differs, or not_returned (the payer sent nothing to compare).
-    # `corrected` names the fields that passed only because the payer said it corrected them.
-    Result = Struct.new(:fields, :corrected, keyword_init: true) do
-      # matched when every field matched; mismatched when any differs; not_compared otherwise.
-      def outcome
-        return :mismatched if fields.value?(:differs)
-        return :matched if fields.values.all?(:matched)
-
-        :not_compared
-      end
-
-      def matched? = outcome == :matched
-
-      def mismatched? = outcome == :mismatched
-
-      def differing = fields.select { |_, result| result == :differs }.keys
-    end
-
     module_function
 
-    # A name as sent to a payer: accents spelled out, uppercase, spaces squeezed. Punctuation is
-    # kept, since a payer may hold GARCIA-LOPEZ or O'BRIEN as written. nil stays nil.
-    def plain(name)
+    # A name as every request spells it for a payer: accents removed (é is E, ß is SS), uppercase,
+    # the characters Stedi refuses removed, spaces squeezed. Other punctuation is kept, since a payer
+    # may hold GARCIA-LOPEZ or O'BRIEN as written. nil stays nil.
+    def payer_normalized(name)
       return nil if name.nil?
 
       name.to_s.gsub(LETTER, LETTERS).unicode_normalize(:nfkd).gsub(MARKS, "")
-          .upcase.gsub("`", "'").squeeze(" ").strip
+          .upcase.gsub("`", "'").gsub(UNSENDABLE, "").squeeze(" ").strip
     end
 
-    # The words of a name, for comparing: plain, with every other character a space.
-    def words(name)
-      plain(name).to_s.gsub(/[^A-Z0-9]+/, " ").split
+    # A first or middle name as it is sent: payer_normalized without a title at either end.
+    def payer_sent(name)
+      untitled(payer_normalized(name))&.join(" ")
+    end
+
+    # A last name as it is sent, and its suffix apart: "Smith Jr." is ["SMITH", "JR"],
+    # "Smith" is ["SMITH", nil]. Titles are not sent. A one-word name is never a suffix (V stays V).
+    def payer_sent_last_name(name)
+      words = untitled(payer_normalized(name))
+      return [nil, nil] if words.nil?
+
+      *rest, last = words
+      suffix = bare(last)
+      return [words.join(" "), nil] if rest.empty? || !SUFFIXES.include?(suffix)
+
+      [rest.join(" ").chomp(","), suffix]
+    end
+
+    # A last name's suffix (JR, SR, I, II, III, IV, V), or nil when it has none.
+    def suffix(name)
+      payer_sent_last_name(name).last
+    end
+
+    # A name with each accented letter written the other way (ANOTHER_SPELLING), as payer_normalized
+    # sends it otherwise: Müller is MUELLER, Đuro is JURO. nil stays nil.
+    def another_spelling(name)
+      return nil if name.nil?
+
+      payer_normalized(name.to_s.unicode_normalize(:nfc).gsub(Regexp.union(ANOTHER_SPELLING.keys), ANOTHER_SPELLING))
+    end
+
+    # A name without its punctuation, as a payer that holds it unpunctuated would: payer_normalized,
+    # apostrophes removed and hyphens as spaces (O'BRIEN-SMITH is OBRIEN SMITH).
+    def unpunctuated(name)
+      return nil if name.nil?
+
+      payer_normalized(name).delete("'").tr("-", " ").squeeze(" ").strip
+    end
+
+    # The words of a name, for comparing: payer_normalized, with every other character a space.
+    def payer_normalized_split(name)
+      payer_normalized(name).to_s.gsub(/[^A-Z0-9]+/, " ").split
+    end
+
+    # A name as it says who someone is: its words run together, so accents, case, spaces, hyphens and
+    # apostrophes don't count and suffixes do (a JR is another person). Two people we hold are one
+    # when their db_normalized names and birth dates are. nil for a blank name.
+    def db_normalized(name)
+      joined = payer_normalized_split(name).join
+      joined unless joined.empty?
     end
 
     # A last name's words without suffixes and titles, unless that would leave none.
+    # Whether two last names differ by a suffix is .suffix's to say.
     def surname_words(name)
-      found = words(name)
-      kept = found.reject { |word| SUFFIXES.include?(word) }
+      found = payer_normalized_split(name)
+      kept = found.reject { |word| SUFFIXES.include?(word) || TITLES.include?(word) }
       kept.empty? ? found : kept
     end
 
-    # `asked` and `returned` are hashes of first_name, last_name and date_of_birth (a Date or
-    # YYYYMMDD; hyphens are ignored). `corrected` is the payer's 001/25: it says it changed the
-    # identifying information it matched on, so names count as matched when the birth date does.
-    # `truncated` allows the returned name to be the asked one cut short; compare two names we
-    # hold with it off.
-    def compare(asked:, returned:, corrected: false, truncated: true, truncated_at: TRUNCATED_AT)
-      cut = (truncated_at if truncated)
-      fields = NAME_RULES.to_h do |name, rule|
-        [name, field(asked[name], returned[name]) { |one, other| send(rule, one, other, cut) }]
-      end
-      born = field(day(asked[:date_of_birth]), day(returned[:date_of_birth])) { |one, other| one == other }
-      relax(fields.merge(date_of_birth: born), corrected)
+    # A name's words without a title at either end, unless that would leave none. nil stays nil.
+    def untitled(normalized)
+      return nil if normalized.nil?
+
+      words = normalized.split
+      kept = words.drop_while(&TITLE).reverse.drop_while(&TITLE).reverse
+      kept.empty? ? words : kept
     end
 
-    def relax(fields, corrected)
-      names = %i[first_name last_name].select { |name| fields[name] == :differs }
-      return Result.new(fields: fields, corrected: []) unless corrected && names.any? &&
-                                                              fields[:date_of_birth] == :matched
+    # A word without the periods and commas around an abbreviation (JR. and DR, are JR and DR).
+    def bare(word) = word.delete(".,")
 
-      Result.new(fields: fields.merge(names.to_h { [_1, :matched] }), corrected: names)
-    end
-
-    # Nothing asked counts as nothing to compare, like nothing returned.
-    def field(asked, returned)
-      return :not_returned if EdiGem.blank?(asked) || EdiGem.blank?(returned)
-
-      yield(asked, returned) ? :matched : :differs
-    end
-
-    # `cut` is the shortest name taken as cut short, or nil when cutting short is not allowed.
-    def same_first?(asked, returned, cut)
-      one = words(asked)
-      other = words(returned)
-      return false if one.empty? || other.empty?
-
-      one.join == other.join || first_of?(one, other) ||
-        (cut && cut_short?(one.join(" "), other.join(" "), cut))
-    end
-
-    # One name is the other's first word: MARY for MARY ANN.
-    def first_of?(one, other)
-      one.first == other.first && (one.one? || other.one?)
-    end
-
-    def same_last?(asked, returned, cut)
-      one = surname_words(asked)
-      other = surname_words(returned)
-      return false if one.empty? || other.empty?
-
-      one.join == other.join || (one - other).empty? || (other - one).empty? ||
-        (cut && cut_short?(one.join, other.join, cut))
-    end
-
-    # Whether the returned name is the asked one cut short, at a length a payer cuts to.
-    def cut_short?(asked, returned, truncated_at)
-      returned.length >= truncated_at && returned.length < asked.length &&
-        asked.start_with?(returned)
-    end
-
-    def day(value)
-      Codec.yyyymmdd(value).delete("-").strip unless EdiGem.blank?(value)
-    end
+    private_class_method :untitled, :bare
   end
 end

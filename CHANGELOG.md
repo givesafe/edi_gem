@@ -4,6 +4,72 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- A send that asked to archive no longer loses the paid answer when the archive write fails
+  (`ArchiveFailed`, for example S3 unreachable): `Responses#from` returns the Response unstored
+  (`stored` nil, `archived?` false) with the failure as `Response#archive_failure`, for the caller
+  to report (Danny, 2026-11-01). Before, the failure raised after Stedi had answered. The gem does
+  not retry the write. A batch status page (`batch_checks`) still raises: it holds no answer, and can be read again.
+- `Provider` can be built from `npi:` alone, and sends only the NPI to Stedi. Stedi finds the
+  provider by NPI and advises leaving the name out (Danny, 2026-10-31). The X12 270 writer now refuses
+  a provider with no name, since NM103 carries it; before, `Provider` refused one when it was built.
+- `Provider` takes `address:` (an `Address`), sent as Stedi's `provider.address`, and left out when
+  nil, as `taxId` is. Stedi says to send either only when the payer requires it.
+- `Response#provider_standing` reads `:needs_provider_details` when every refusal about our provider
+  asks for our tax ID and address (`Rejection#provider_details_wanted?`: AAA 97 in any lane, AAA 15
+  in the provider's), where it read `:refused` before.
+- `Response#provider_standing` reads `:not_connected` for an AAA 79 with nothing beside it that
+  says to ask again (`Response#not_connected?`), where it read nil before. Stedi: "Don't
+  automatically retry… contact Stedi support".
+- `Response#provider_standing` reads `:accepted` for `not_identified`, where it read nil before: a
+  payer that could not match the person looked them up for our provider.
+- Stedi busy on a real-time check (HTTP 429, `rate_limited`) is retried until two minutes after the
+  first send, past `attempts`, as Stedi's eligibility troubleshooting page says for a 429 ("Retry
+  immediately") and a 42 ("for up to 2 minutes"). The pauses are the backoff's, or Retry-After.
+  A new `retry` key, `retry_until_end`, names the kinds retried this way (`Policy#retry_until_end?`);
+  a send with no end (`retry_until`) still stops at `attempts`.
+- A discovery send and a batch submit are no longer sent again after our own timeout: Stedi
+  doesn't say a second one is safe or unbilled. Their other failures are retried as before.
+- A discovery's results are polled under their own operation, `discovery_results` (same path and
+  timeout), so a timed-out poll is still retried and the polls pace apart from the sends, as
+  Stedi limits the two endpoints apart. The mock answers both.
+- `AnsweredPlan#prior_member_id`: the ID the member ID replaced, when the payer names it (X12
+  REF Q4 "Prior Identifier Number", Stedi's `planInformation.priorIdNumber`), on a check's plan
+  and a discovery's, or nil. The X12 schema doesn't read it yet.
+- `batch_checks` and `batch_results` take `only:` (identifiers): the items sent under those alone are
+  read and filed, so a caller polling a batch files only the answers it hasn't taken yet.
+- `Batch::Status#answering?` and `#done?`: when a batch's results are worth reading (a success or
+  error count above zero) and when polling can stop (nothing in progress after a check was
+  processed, or a finished status), as Stedi's batch refresh guide says. `#progress` reads a batch
+  done by its counts before its status caught up as completed, with errors when any check ended in one.
+- `Response#deciding_rejection`: the refusal that decided the state, read in the state's own order,
+  not the first one listed. `#error_code` now reads it, so a refusal listed ahead that decides
+  nothing no longer hides the one that does. `#error_summary` and `Rejection#summary` say it in
+  codes alone ("AAA 62 at subscriber, follow-up C"), never Stedi's free text.
+- `Response#our_setup_refused?` and `Rejection#our_setup_refused?`: a 41 or a T4 in the payer lane,
+  which Stedi reads as our NPI, credentials or the payer ID we sent. The state stays `payer_silent`.
+- AAA 60 reads as `birth_date_after_day_asked`, no longer `date_out_of_range` (kept for 62 and 63).
+  AAA 64 reads as `dependent_id_required`, no longer `member_id_invalid` (kept for 72): Stedi says
+  the payer needs another dependent identifier, so it is `our_fault` and its answer `rejected`
+  without lines, no longer `not_identified`.
+- AAA 58 reads as `invalid_date_of_birth`, no longer `date_of_birth_mismatch` (kept for 71): Stedi
+  says the birth date is missing or malformed, so it is `our_fault` and its answer `rejected`
+  without lines, no longer `not_identified`.
+- A real-time check's HTTP 400 that holds Stedi's AAA refusals is read as a 200's is, so a 79 there
+  is the payer Stedi couldn't connect to, not a `malformed_request` Fault. A 400 holding no AAA is
+  still that Fault. New: `errors.answer_in_status` in `data/sources.yml`, `Policy#answer_in_status?`,
+  `Policy#fault_for_status`, `Rejection#aaa?`, `Codec::AAA03_VALUES`.
+- `PersonRefusal.refusal_among`: the refusal `.finding_among` reads.
+- `Fault#to_rejection` is removed: no caller read it.
+- Names sent as Stedi asks: a suffix (JR, SR, I, II, III, IV, V, with or without a period)
+  goes in the request's `suffix` (X12 NM107), for the subscriber and dependents, not the last name;
+  titles aren't sent; `~ * : ^ >` are removed from every name. `Identity::SUFFIXES` is split into
+  `SUFFIXES` and `TITLES`. New `Identity.payer_sent`, `.payer_sent_last_name`, `.suffix`,
+  `.another_spelling` and `.unpunctuated`; `Person::Asked#another_spelling?`, `#another_spelling`,
+  `#punctuated?` and `#unpunctuated`, for a second question asked with the names spelled the
+  other way (MUELLER for Müller) or written without punctuation.
+- A suffix the payer sends apart (Stedi's `suffix`, X12 NM107) is read into `Person#last_name`.
+  The mock echoes the suffix it was sent.
+
 - `Response#provider_standing`: `:refused`, `:accepted` or nil, what an answer says of our
   provider's standing with the payer, so a caller never reads the refusals and the state for it.
 - `Response#checked_plan`, `#medical_plans(asked:)` and `#error_code`;
@@ -16,7 +82,7 @@ The caller contract for each is in the README's "V1 reference".
   found plans decide a discovery is the caller's, so the gem has no discovery fold.
 - `PersonRefusal::FINDINGS`: what each refusal in the person's lanes says the answer found, read by
   `Response::State` and `Finding` alike. Beyond the identity codes, `78` (not in this group or plan)
-  is `not_on_this_id`; what we sent (`15`, `33`, `56`, `57`, `60`, `62`, `63`) is `our_fault`, and
+  is `not_on_this_id`; what we sent (`15`, `33`, `56`, `57`, `60`, `62`, `63`, `64`) is `our_fault`, and
   its answer `rejected` when no line came with it; a death before the day asked (`61`) is
   `not_covered`.
 - `MedicalPlan#payer_id`: Stedi's payer ID for a plan's payer code, from Stedi's payer
@@ -36,8 +102,24 @@ The caller contract for each is in the README's "V1 reference".
   question asks, so the details themselves are never stored.
 - `Coverage.context(code)`: what EB01 5, 7 and 8 say beyond the status.
 - `Batch::Status#progress`, `Batch::Check#completed?`, `Error#code` and `Fault#code`.
+- `Source::Stedi#eligibility` asks again a payer that can't answer right now, as Stedi says:
+  at once and for up to two minutes, unless a 42's follow-up is C, N or S (`AskingAgain`;
+  `payer_pauses:`, `sleeper:` and `clock:` on `Stedi.new`). `Response#payer_unavailable?` (a 42
+  Stedi would ask again, an 80 or a 79 in the payer's lane; `Rejection#payer_unreached?`),
+  `#resubmission_refused?` (a 42 with C, N or S, which Stedi reads as a problem with the request,
+  not a payer that is down; `Rejection#resubmission_refused?`) and `#ask_again?`;
+  `Rejection#reason_code`. `Rejection#retryable?` follows Stedi's rule, and
+  `#recognised?`, `RETRYABLE_REASONS` and `RETRYABLE_FOLLOWUPS` are removed. The eligibility
+  timeout is 125 s, and the transport starts no retry past the two minutes (`retry_until:`).
+- `Coverage::NOT_IMPLYING` includes `managed_care_coordinator`: an MC line on 30 alone no longer
+  reads as active.
+- A Medicaid plan is paired with an MCO's by the primary payer's name too
+  (`FoundPlan#names_as_primary_payer?`).
+- `AnsweredPlan#plan_ends_on` is nil for an end in the year 9999, a payer's placeholder.
 - `Source::Mock` (`Source.for(:mock, ...)`): Stedi with discovery answered from code, since
-  Stedi's test mode answers no discovery.
+  Stedi's test mode answers no discovery. Its payer-down answers (42, 80) carry a follow-up
+  Stedi would ask again, and it asks a check once unless given `payer_pauses:`, so dev and spec
+  runs never sleep.
 - `EdiGem::ArchiveFailed#retryable?`: whether the same archive read or write may succeed later.
   True for a network failure reaching an S3 bucket (timeouts, socket, connection, IO and
   TLS errors), for an S3 bucket that answered 500, 502, 503, 504 or 429, and for a
@@ -53,6 +135,11 @@ The caller contract for each is in the README's "V1 reference".
   (nil included) the archive did not make: an object in another bucket, or a uri that is not a
   local archive's. The messages are the same and nothing is sent. The uri is stored data, not a
   defect in the call.
+- `Stedi#archived_eligibility(response_uri)`: a kept eligibility answer, a real-time check's or a
+  batch item's, read into a `Response` again as it was recorded, without calling Stedi; nothing is
+  billed or kept again. Its exchange is the archive's read (`get`, 200, no headers). It raises as
+  `archived_discovery` does. `Source::Base#archived` now takes `kind:` (`:eligibility` or
+  `:discovery`, no default; any other raises `ArgumentError`), where it read discovery alone.
 
 ### Reviewed
 

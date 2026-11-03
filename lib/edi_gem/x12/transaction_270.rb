@@ -106,10 +106,12 @@ module EdiGem
         segment("SE", (body.length + 1).to_s, @control_number)
       end
 
+      # NM103 carries the provider's name, and an X12 270 has no provider without one.
       def provider_name(provider)
-        return [ORGANISATION, provider.organization_name.to_s, "", ""] if provider.organization_name
+        return [ORGANISATION, provider.organization_name, "", ""] unless EdiGem.blank?(provider.organization_name)
+        return [PERSON, provider.last_name, provider.first_name.to_s, ""] unless EdiGem.blank?(provider.last_name)
 
-        [PERSON, provider.last_name.to_s, provider.first_name.to_s, ""]
+        raise ArgumentError, "an X12 270 needs a provider name: organization_name, or last_name for an individual"
       end
 
       # TRN03 identifies who assigned the trace, conventionally 1 plus a nine-digit EIN. Falls

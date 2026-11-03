@@ -183,6 +183,53 @@ RSpec.describe "batching through Stedi" do
       expect(EdiGem::Batch::Status.new(state: "QUEUED").progress).to eq(:in_progress)
     end
 
+    # Stedi: "Don't start polling until either the successCount or the errorCount are greater than zero".
+    describe "#answering?" do
+      it "is answering once a check succeeded" do
+        expect(EdiGem::Batch::Status.new(state: "IN_PROGRESS", succeeded: 1, failed: 0)).to be_answering
+      end
+
+      it "is answering once a check ended in an error" do
+        expect(EdiGem::Batch::Status.new(state: "IN_PROGRESS", succeeded: 0, failed: 1)).to be_answering
+      end
+
+      it "is not answering before either count is above zero" do
+        expect(EdiGem::Batch::Status.new(state: "IN_PROGRESS", succeeded: 0, failed: 0)).to_not be_answering
+      end
+    end
+
+    # Stedi: "You can stop polling when the inProgressCount reaches zero, or when the batch status is
+    # COMPLETED or COMPLETED_WITH_ERRORS".
+    describe "#done?" do
+      it "is not done while a check is still in progress" do
+        expect(status).to_not be_done
+      end
+
+      it "is done once nothing is in progress after a check was processed" do
+        expect(EdiGem::Batch::Status.new(state: "IN_PROGRESS", succeeded: 2, in_progress: 0)).to be_done
+      end
+
+      it "is not done on a count of zero before any check was processed" do
+        expect(EdiGem::Batch::Status.new(state: "IN_PROGRESS", succeeded: 0, in_progress: 0)).to_not be_done
+      end
+
+      it "is done once its status is finished" do
+        expect(EdiGem::Batch::Status.new(state: "COMPLETED")).to be_done
+      end
+    end
+
+    context "WHEN nothing is in progress but its status has not caught up" do
+      it "reads it completed when every processed check succeeded" do
+        expect(EdiGem::Batch::Status.new(state: "IN_PROGRESS", succeeded: 2, failed: 0, in_progress: 0).progress)
+          .to eq(:completed)
+      end
+
+      it "reads it completed with errors when a check ended in one" do
+        expect(EdiGem::Batch::Status.new(state: "IN_PROGRESS", succeeded: 1, failed: 1, in_progress: 0).progress)
+          .to eq(:completed_with_errors)
+      end
+    end
+
     it "asks for the batch by id" do
       source, transport = stedi_answering(canned("stedi_batch_status_in_progress"))
       source.batch_status("01JB7Q2F3K8N4X5Y6Z7A8B9C0D")
@@ -336,15 +383,25 @@ RSpec.describe "batching through Stedi" do
       expect(filed).to eq([%w[batch-42_member-7087 batch-42_member-7091], [:batch_result]])
       expect(page.items.map { |item| item.response.archived? }).to eq([true, true])
     end
+
+    # A caller that took some answers already reads, and files, only the ones it hasn't.
+    it "reads and files only the answers sent under the identifiers asked for, and still pages on" do
+      archive = RecordingArchive.new
+      page, = read_results(store: archive, archive: { name: "batch-42" }, only: ["member-7091"])
+
+      expect([page.items.map(&:identifier), archive.kept.map(&:name)])
+        .to eq([%w[member-7091], %w[batch-42_member-7091]])
+      expect(page).to be_more
+    end
   end
 
   describe "#batch_checks with archive:" do
     let(:archive) { RecordingArchive.new }
     let(:batch_id) { "01JB7Q2F3K8N4X5Y6Z7A8B9C0D" }
 
-    def read_page(fixture = "stedi_batch_checks_page_one", **filing)
+    def read_page(fixture = "stedi_batch_checks_page_one", only: nil, **filing)
       source, transport = stedi_answering(canned(fixture), archive: archive)
-      [source.batch_checks(batch_id, archive: { name: "batch-42" }.merge(filing)), transport]
+      [source.batch_checks(batch_id, archive: { name: "batch-42" }.merge(filing), only: only), transport]
     end
 
     it "files each item on its own, under the identifier we sent with it" do
@@ -352,6 +409,13 @@ RSpec.describe "batching through Stedi" do
 
       expect(archive.kept.map(&:name))
         .to eq(%w[batch-42_member-7087 batch-42_member-7091 batch-42_member-7154])
+    end
+
+    it "reads and files only the checks sent under the identifiers asked for" do
+      page, = read_page(only: %w[member-7154])
+
+      expect([page.items.map(&:identifier), archive.kept.map(&:name)])
+        .to eq([%w[member-7154], %w[batch-42_member-7154]])
     end
 
     it "files them as this vendor's batch checks" do

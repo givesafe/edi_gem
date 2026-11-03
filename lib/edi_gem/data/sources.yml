@@ -63,7 +63,42 @@ sources:
     operations:
       eligibility:
         path: /2024-04-01/change/medicalnetwork/eligibility/v3
+        # Stedi holds a real-time check open for up to 120 seconds, asking the payer again
+        # meanwhile, and warns that cancelling and sending again sooner adds requests in flight.
+        # So the gem waits a little past that for Stedi's own answer. Stedi#eligibility starts no
+        # send, a transport retry included, once two minutes have passed since its first.
+        timeout: 125
+        errors:
+          # Stedi answers a payer ID it can't connect to with a 400 that holds an AAA 79 ("There is a
+          # problem connecting with this payer"), so a 400 is read as an answer when it holds one.
+          answer_in_status:
+            - "400"
+        retry:
+          # Stedi busy is retried for those same two minutes, past `attempts`: Stedi's eligibility
+          # troubleshooting page lists an HTTP 429 as a 42, "Retry immediately", and a 42 is retried
+          # "for up to 2 minutes". The pauses between are the backoff's, or the Retry-After given.
+          retry_until_end:
+            - rate_limited
+      # Stedi doesn't say that sending a discovery again after our own timeout is safe or unbilled:
+      # the first may still be running, and its pages document no idempotency key for discovery.
+      # So a timed-out send is not sent again. Every other kind is retried as by default.
       discovery:
+        path: /2024-04-01/insurance-discovery/check/v1
+        timeout: 130
+        throttle:
+          per_second: 1
+          burst: 2
+        retry:
+          retry_on:
+            - unreachable
+            - rate_limited
+            - vendor_unavailable
+            - payer_unavailable
+            - already_in_flight
+      # A discovery's results, polled under the name Stedi gave it: a read, retried as by default,
+      # a timeout included. Stedi, insurance discovery: the results "can take up to 120 seconds to
+      # return a response". Stedi limits it apart from the discovery send.
+      discovery_results:
         path: /2024-04-01/insurance-discovery/check/v1
         timeout: 130
         throttle:
@@ -80,6 +115,15 @@ sources:
         throttle:
           per_second: 1
           burst: 2
+        # As for a discovery send: Stedi doesn't say that submitting a batch again after our own
+        # timeout makes no second batch, so a timed-out submit is not sent again.
+        retry:
+          retry_on:
+            - unreachable
+            - rate_limited
+            - vendor_unavailable
+            - payer_unavailable
+            - already_in_flight
       batch_status:
         base_url: https://manager.us.stedi.com
         path: /2024-04-01/eligibility-manager/batch
@@ -95,7 +139,8 @@ sources:
       per_second: 10
     errors:
       status:
-        # Answered when a request with the same Idempotency-Key is still in progress.
+        # Stedi's answer when a request reuses an Idempotency-Key still in progress, as it documents
+        # for its claim endpoints; its eligibility, discovery and batch pages don't mention keys.
         "409": already_in_flight
     # Payers that will not answer through Stedi without the provider's own secret, by Stedi's
     # payer code, and the Credential keys each one needs. A request short of them is refused

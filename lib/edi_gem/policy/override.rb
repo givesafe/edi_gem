@@ -5,7 +5,7 @@ module EdiGem
     # What a caller may override on a Policy: the keys of the `retry` block of data/sources.yml.
     # Anything else is refused, so a misspelt setting is not silently ignored.
     module Override
-      RETRY_KEYS = %w[attempts backoff multiplier max_delay jitter retry_on].freeze
+      RETRY_KEYS = %w[attempts backoff multiplier max_delay jitter retry_on retry_until_end].freeze
 
       # The overrides in the shape of a source's attributes: string keys, one section deep.
       def self.sections(overrides)

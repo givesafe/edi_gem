@@ -16,9 +16,10 @@ module EdiGem
         IDENTIFIER = "submitterTransactionIdentifier"
 
         # `directory` is the source's payer directory, which each Response's plans ask for their
-        # payer's ID.
-        def initialize(clearinghouse:, archive: nil, directory: nil)
+        # payer's ID. `policy` says what a failing HTTP status means (Fault.of_status).
+        def initialize(clearinghouse:, policy:, archive: nil, directory: nil)
           @clearinghouse = clearinghouse
+          @policy = policy
           @archive = archive
           @directory = directory
         end
@@ -40,17 +41,22 @@ module EdiGem
 
         # `body` is passed by calls whose answer carries a status (discovery); an eligibility
         # check is always settled when it returns.
+        #
+        # A write the archive fails (ArchiveFailed) does not lose the answer: it was billed and is
+        # read in full, so the Response comes back unstored, carrying the failure as
+        # `archive_failure` for the caller to report. Nothing here retries the write.
         def from(exchange, schema:, feature:, handle: nil, body: nil, archive: nil)
           payload = Payload.new(body: exchange.response_body, dialect: :json)
-          reading = Reading.new(document: payload.document, schema: Schema.fetch(schema))
+          reading = read(exchange) { Reading.new(document: payload.document, schema: Schema.fetch(schema)) }
           status = body && body["status"]
-          stored = (kept(exchange, feature, archive) if archive)
+          stored, archive_failure = filed(exchange, feature, archive)
           refuse_error(exchange, status)
 
           Response.new(**reading.parts, payload: payload, exchanges: [exchange],
                                         handle: handle, state: (:pending if status == PENDING),
                                         settled: status.nil? || status == COMPLETE,
-                                        stored: stored, directory: @directory)
+                                        stored: stored, archive_failure: archive_failure,
+                                        directory: @directory)
         end
 
         # Files each item of a batch page as its own object, named `<name>_<identifier>`, and
@@ -80,6 +86,28 @@ module EdiGem
 
         private
 
+        # The body as the block reads it. A failing HTTP status the transport let through
+        # (Policy#answer_in_status?) is an answer only when its body holds Stedi's AAA refusals, read
+        # as a success's are: a 400 with an AAA 79 is a payer Stedi couldn't connect to. Without one
+        # it is the Fault its status means, as the transport raises it, and nothing is filed. A body
+        # that isn't JSON holds none.
+        def read(exchange)
+          return yield unless exchange.failing_status?
+
+          reading = begin
+            yield
+          rescue UnreadableBody
+            nil
+          end
+          return reading if reading&.rejections&.any?(&:aaa?)
+
+          raise status_fault(exchange)
+        end
+
+        def status_fault(exchange)
+          Fault.of_status(exchange.status, policy: @policy, path: URI(exchange.url).path)
+        end
+
         def refuse_error(exchange, status)
           raise Fault.new(kind: :vendor_error, source: @clearinghouse, status: exchange.status) if status == ERROR
         end
@@ -97,6 +125,16 @@ module EdiGem
         def item_exchange(page, item)
           Exchange.new(method: page.method, url: page.url, status: page.status,
                        response_body: JSON.generate(item), started_at: page.started_at)
+        end
+
+        # [stored, nil] when the archive kept the bodies, [nil, failure] when it could not, and
+        # [nil, nil] when the send did not ask to archive.
+        def filed(exchange, feature, filing)
+          return [nil, nil] unless filing
+
+          [kept(exchange, feature, filing), nil]
+        rescue ArchiveFailed => error
+          [nil, error]
         end
 
         def kept(exchange, feature, filing)

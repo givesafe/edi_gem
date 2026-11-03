@@ -10,17 +10,17 @@ module EdiGem
   #
   # `directory` is the source's payer directory (anything answering payer_id_for), asked only
   # when payer_id is, so reading an answer again makes no directory call unless a caller wants
-  # the payer's ID. `asked` is who the discovery asked about, a Person::Asked.
+  # the payer's ID.
   class MedicalPlan
     include Concealed
     include AnsweredPlan
 
     # The medical plans among a discovery's found plans. A Medicaid plan another plan names as its
     # primary payer goes with that plan, and is not a plan of its own.
-    def self.all(found_plans, directory: nil, asked: nil)
+    def self.all(found_plans, directory: nil)
       medicaid_plans = found_plans.select { |plan| named_as_primary?(plan, found_plans) }
       (found_plans - medicaid_plans).select(&:medical?).map do |plan|
-        new(plan, medicaid: medicaid_for(plan, medicaid_plans), directory: directory, asked: asked)
+        new(plan, medicaid: medicaid_for(plan, medicaid_plans), directory: directory)
       end
     end
 
@@ -35,11 +35,10 @@ module EdiGem
     end
     private_class_method :named_as_primary?, :medicaid_for
 
-    def initialize(found_plan, medicaid: nil, directory: nil, asked: nil)
+    def initialize(found_plan, medicaid: nil, directory: nil)
       @found_plan = found_plan
       @medicaid_plan = medicaid
       @directory = directory
-      @asked = asked
     end
 
     # The clearinghouse's payer ID for the plan's payer. Network I/O: the first time a source is
@@ -69,27 +68,11 @@ module EdiGem
     # :self, :dependent, or nil when the payer did not say (Person#relationship).
     def relationship = person&.relationship
 
-    # How the person matched compares with who was asked about (FoundPlan#identify).
-    def identify(asked, **options) = @found_plan.identify(asked, **options)
-
-    # The person matched compared with `asked`, and the details given beside the core with the
-    # ones the payer holds; with nobody asked, nothing is compared and nothing was given.
-    def identification
-      @identification ||= identify(@asked.to_h, given_fields: given_fields)
-    end
-
     # Coverage's finding for the plan's own lines on this day.
     def coverage_on(date) = @found_plan.coverage_on(date)
-
-    # The found plan's (FoundPlan#finding).
-    def finding(on:) = @found_plan.finding(on: on)
 
     def concealed_inspect
       "#<#{self.class} #{@found_plan.inspect} medicaid=#{!@medicaid_plan.nil?}>"
     end
-
-    private
-
-    def given_fields = @asked&.given_fields(person) || {}
   end
 end

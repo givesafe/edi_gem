@@ -45,6 +45,12 @@ module EdiGem
       super(message_text)
     end
 
+    # The Fault an HTTP status means under `policy` (Policy#kind_for_status), at `path`.
+    def self.of_status(status, policy:, path:, retry_after: nil)
+      new(kind: policy.kind_for_status(status) || :unexpected, source: policy.name, status: status, path: path,
+          retry_after: retry_after)
+    end
+
     def retryable? = KINDS.fetch(@kind)[:retryable]
 
     def level = KINDS.fetch(@kind)[:level]
@@ -53,12 +59,6 @@ module EdiGem
 
     # A fault is recorded by its kind: timeout, vendor_error.
     def code = @kind.to_s
-
-    # The Rejection this fault stands for, so a failure can be recorded as a Response state.
-    def to_rejection
-      Rejection.new(level: level, code: @kind, description: description,
-                    followup: retryable? ? "Resubmission Allowed" : nil)
-    end
 
     private
 

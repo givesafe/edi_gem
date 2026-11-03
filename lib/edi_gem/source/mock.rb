@@ -15,10 +15,14 @@ module EdiGem
     class Mock < Stedi
       NAME = :mock
 
+      # The operations the mock answers itself: a discovery and its results.
+      DISCOVERY_OPERATIONS = %i[discovery discovery_results].freeze
+
       # `payers` and `people` are Answers'. Every other keyword is Stedi's, and `transport:` serves
-      # only what goes to Stedi: discovery always goes through the gem's own Transport.
-      def initialize(payers: Answers::PAYERS, people: nil, **stedi)
-        super(**stedi)
+      # only what goes to Stedi: discovery always goes through the gem's own Transport. A check asks
+      # once unless `payer_pauses:` says otherwise, so a dev or spec run never sleeps.
+      def initialize(payers: Answers::PAYERS, people: nil, payer_pauses: [], **stedi)
+        super(payer_pauses: payer_pauses, **stedi)
         @answers = Answers.new(payers: payers, people: people)
       end
 
@@ -29,7 +33,7 @@ module EdiGem
       # the conditional is the one place a connection is selected (RAILS.md section 4).
       # :reek:ControlParameter
       def connection_for(operation)
-        operation == :discovery ? discovery_connection : super
+        DISCOVERY_OPERATIONS.include?(operation) ? discovery_connection : super
       end
 
       # The gem's own Transport, never an injected one, so throttling, retries and faults are what

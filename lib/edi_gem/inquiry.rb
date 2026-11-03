@@ -4,14 +4,6 @@ module EdiGem
   # The question sent to a source: an eligibility check at a known payer, or an insurance
   # discovery that looks for coverage without one.
   module Inquiry
-    # What a discovery asked: who (`person`, a Person::Asked carrying any address and last four
-    # given beside the core) and the day it asked about (`as_of`, a Date). An answer is compared
-    # with it whether the answer came at once or was collected later (Response#medical_plans'
-    # `asked:` takes `person`), so a later change to the caller's record never changes it.
-    # Built by Discovery#question, or recovered from an archived request (Source's
-    # archived_question).
-    Question = Struct.new(:person, :as_of, keyword_init: true)
-
     # Fields shared by both kinds of inquiry.
     class Base
       # Service type 30, general health benefit coverage. Every payer must answer it. Send one
@@ -49,7 +41,7 @@ module EdiGem
         search_options.any? { |option| option.all? { |field| searched(field) } }
       end
 
-      # Stedi's Idempotency-Key for this inquiry on the caller's day `on` (see RequestKey). `routing`
+      # The Idempotency-Key sent with this inquiry on the caller's day `on` (see RequestKey). `routing`
       # is what the kind of inquiry needs to say what it asks (a check's clearinghouse).
       def idempotency_key(secret:, on:, **routing)
         RequestKey.idempotency_key(self.class::OPERATION, asked_on_a_day(**routing), secret: secret, on: on)
@@ -106,8 +98,9 @@ module EdiGem
       # The patient's names as the payer is sent them, so any spelling sent the same way is the
       # same question; the member id is the subscriber's.
       def asked(clearinghouse:)
-        { first_name: Identity.plain(patient.first_name), last_name: Identity.plain(patient.last_name),
-          date_of_birth: birth_date, insurance_id: @subscriber.member_id, payer_id: @payer_code,
+        { first_name: Identity.payer_normalized(patient.first_name),
+          last_name: Identity.payer_normalized(patient.last_name), date_of_birth: birth_date,
+          insurance_id: @subscriber.member_id, payer_id: @payer_code,
           payer_type: clearinghouse }
       end
     end
@@ -130,22 +123,15 @@ module EdiGem
         super
       end
 
-      # What this discovery asks (a Question): the subscriber as given, with the address and SSN
-      # it carries, of which the person keeps the last four only, and the day as a Date.
-      def question
-        Question.new(person: Person::Asked.new(first_name: @subscriber.first_name, last_name: @subscriber.last_name,
-                                               date_of_birth: birth_date, address: @subscriber.address,
-                                               ssn: @subscriber.ssn),
-                     as_of: Codec.day(service_date))
-      end
-
       private
 
-      # The names as given, not as sent. The SSN, the address's first line and its postal code
-      # make two discoveries of one person different questions.
+      # The names as the payer is sent them, as a check's are, so any spelling sent the same way is
+      # the same question. The SSN, the address's first line and its postal code make two
+      # discoveries of one person different questions.
       def asked
         address = @subscriber.address
-        { first_name: @subscriber.first_name, last_name: @subscriber.last_name, date_of_birth: birth_date,
+        { first_name: Identity.payer_normalized(@subscriber.first_name),
+          last_name: Identity.payer_normalized(@subscriber.last_name), date_of_birth: birth_date,
           ssn: @subscriber.ssn, address_line1: address&.line1, postal_code: address&.postal_code }
       end
     end

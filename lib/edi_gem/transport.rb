@@ -13,8 +13,11 @@ module EdiGem
     end
 
     # Runs one exchange, retrying per policy. The block returns the HTTP response; a failing
-    # status becomes a Fault, raised once retries are exhausted.
-    def perform(path:, &block)
+    # status becomes a Fault, raised once retries are exhausted, unless the policy says its body may
+    # hold an answer (Policy#answer_in_status?): that response is returned to be read. `retry_until`,
+    # a reading of this transport's clock, is when retrying stops: no retry starts after it, nor
+    # waits past it.
+    def perform(path:, retry_until: nil, &block)
       attempt = 0
       loop do
         attempt += 1
@@ -22,9 +25,10 @@ module EdiGem
         response, fault = try(path, &block)
         return response if fault.nil?
 
-        raise fault unless retry?(fault, attempt)
+        delay = retry_delay(fault, attempt, retry_until)
+        raise fault if delay.nil?
 
-        @sleeper.sleep(delay_for(fault, attempt))
+        @sleeper.sleep(delay)
       end
     end
 
@@ -57,8 +61,9 @@ module EdiGem
       return nil if response.is_a?(Net::HTTPSuccess)
 
       status = response.code.to_i
-      Fault.new(kind: @policy.kind_for_status(status) || :unexpected, source: @policy.name,
-                status: status, path: path, retry_after: retry_after(response))
+      return nil if @policy.answer_in_status?(status)
+
+      Fault.of_status(status, policy: @policy, path: path, retry_after: retry_after(response))
     end
 
     def from_exception(error, path)
@@ -73,8 +78,21 @@ module EdiGem
       Integer(value, exception: false) if value
     end
 
-    def retry?(fault, attempt)
-      attempt < @policy.attempts && @policy.retry?(fault.kind)
+    # The wait before the next attempt, or nil when none is due: out of attempts, a kind the policy
+    # doesn't retry, or a wait that would end after `retry_until`. A kind the policy retries until
+    # the end is out of attempts only at `retry_until`.
+    # :reek:ControlParameter
+    def retry_delay(fault, attempt, retry_until)
+      kind = fault.kind
+      return unless @policy.retry?(kind) && attempts_left?(kind, attempt, retry_until)
+
+      delay = delay_for(fault, attempt)
+      delay if retry_until.nil? || now + delay < retry_until
+    end
+
+    # :reek:ControlParameter
+    def attempts_left?(kind, attempt, retry_until)
+      attempt < @policy.attempts || (!retry_until.nil? && @policy.retry_until_end?(kind))
     end
 
     def delay_for(fault, attempt)

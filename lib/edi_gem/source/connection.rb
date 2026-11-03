@@ -24,12 +24,13 @@ module EdiGem
         @transports = {}
       end
 
-      def post(operation, body, idempotency_key: nil)
+      # `retry_until` is a Transport clock reading after which no retry starts (Transport#perform).
+      def post(operation, body, idempotency_key: nil, retry_until: nil)
         path = @policy.path_for(operation)
         request = Net::HTTP::Post.new(url_for(operation, path))
         request.body = body
         request["Idempotency-Key"] = idempotency_key if idempotency_key
-        send_request(request, operation, path)
+        send_request(request, operation, path, retry_until: retry_until)
       end
 
       # `query` is sent as the URL's query string; the Transport and any Fault name only `path`.
@@ -52,10 +53,12 @@ module EdiGem
       end
 
       # Transport owns rescue, status checks and retries.
-      def send_request(request, operation, path)
+      def send_request(request, operation, path, retry_until: nil)
         @headers.each { |name, value| request[name.to_s] = value }
         started_at = Time.now
-        response = transport(operation).perform(path: path) { client(operation).request(request) }
+        response = transport(operation).perform(path: path, retry_until: retry_until) do
+          client(operation).request(request)
+        end
         Exchange.from_http(request: request, response: response, started_at: started_at)
       end
 

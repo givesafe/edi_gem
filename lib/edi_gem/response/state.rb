@@ -20,11 +20,20 @@ module EdiGem
         return :pending if pending?
         return :rejected if rejected?
         return :not_identified if NOT_IDENTIFIED.include?(person_refusal)
-        return :payer_silent if rejections_at(:payer).any?
+        return :payer_silent if payer_rejections.any?
         return without_lines if benefit_lines.empty?
         return :partial if @rejections.any?
 
         :complete
+      end
+
+      # The refusal that decided #name, read in the same order: one about our provider (which the
+      # caller files apart) or the request; the person's, when the payer can't tell who they are; the
+      # payer's, the one its next step turns on (refused as sent or our setup, then unreached); then
+      # the person's that FINDINGS reads. Beside benefit lines (partial) the lines decided, and this
+      # is the refusal about part of what was asked. nil with no refusal.
+      def deciding_rejection
+        refused_request || not_identified_refusal || payer_refusal || person_refusal_rejection || @rejections.first
       end
 
       private
@@ -54,13 +63,34 @@ module EdiGem
         @rejections.any? { |rejection| OUR_FAULT_LEVELS.include?(rejection.level) }
       end
 
+      def refused_request
+        @rejections.find(&:about_provider?) ||
+          @rejections.find { |rejection| OUR_FAULT_LEVELS.include?(rejection.level) }
+      end
+
+      def not_identified_refusal
+        person_refusal_rejection if NOT_IDENTIFIED.include?(person_refusal)
+      end
+
+      def payer_refusal
+        payer_find { |rejection| rejection.resubmission_refused? || rejection.our_setup_refused? } ||
+          payer_find(&:payer_unreached?) || payer_rejections.first
+      end
+
+      def payer_find(&) = payer_rejections.find(&)
+
       # The patient may be the subscriber or a dependent of one; a refusal in either lane is the same.
       def person_refusal
         PersonRefusal.finding_among(@rejections)&.first
       end
 
-      def rejections_at(level)
-        @rejections.select { |rejection| rejection.level == level }
+      def person_refusal_rejection
+        PersonRefusal.refusal_among(@rejections)
+      end
+
+      # The payer lane, and in another lane a reason Stedi reads as the payer's (Rejection#about_payer?).
+      def payer_rejections
+        @rejections.select(&:about_payer?)
       end
     end
   end

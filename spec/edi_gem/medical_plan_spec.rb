@@ -6,7 +6,6 @@ require "pp"
 
 RSpec.describe EdiGem::MedicalPlan do
   let(:as_of) { Date.new(2026, 6, 1) }
-  let(:asked) { { first_name: "Testfirst", last_name: "Testlast", date_of_birth: Date.new(1980, 1, 1) } }
   let(:line) do
     { member_id: "MOCKID0002", payer_code: "P1", payer_name: "EXAMPLE PAYER", status: :active,
       plan_name: "EXAMPLE PLAN", plan_number: "PLAN01" }
@@ -176,59 +175,13 @@ RSpec.describe EdiGem::MedicalPlan do
   end
 
   describe "who the payer matched" do
-    def compared(asked_about = asked, **fields)
-      found.replace([found_plan([line], held.merge(fields))])
-      plan.identify(asked_about).result
-    end
-
-    it "matches WHEN the name and birth date match, keeping the person as the payer holds them" do
-      expect([plan.identify(asked).result.outcome, plan.person.first_name, plan.person.last_name, plan.person.born_on])
-        .to eq([:matched, "TESTFIRST", "TESTLAST", Date.new(1980, 1, 1)])
-    end
-
-    it "matches WHEN the payer spells the name its own way" do
-      asked_about = asked.merge(first_name: "José", last_name: "Núñez-Testlast Jr")
-
-      expect(compared(asked_about, first_name: "JOSE", last_name: "NUNEZ TESTLAST")).to be_matched
-    end
-
-    it "matches WHEN the payer cut a long first name short" do
-      expect(compared(asked.merge(first_name: "Maximiliano"), first_name: "MAXIMILI")).to be_matched
-    end
-
-    it "names the birth date as the field that differs, keeping the payer's" do
-      result = compared(date_of_birth: "19800102")
-
-      expect([result.mismatched?, result.differing, plan.person.born_on])
-        .to eq([true, [:date_of_birth], Date.new(1980, 1, 2)])
-    end
-
-    it "is mismatched on the first name WHEN it is another name a letter apart" do
-      expect(compared(first_name: "RESTFIRST").differing).to eq [:first_name]
-    end
-
-    it "is mismatched on the last name, keeping the payer's" do
-      expect([compared(last_name: "OTHER").mismatched?, plan.person.last_name]).to eq([true, "OTHER"])
-    end
-
-    context "WHEN the payer says it corrected the name it matched on (001/25)" do
-      let(:corrected) { { maintenance_type_code: "001", maintenance_reason_code: "25" } }
-
-      it "is a match on the birth date" do
-        expect(compared(last_name: "OTHER", **corrected)).to be_matched
-      end
-
-      it "is mismatched WHEN the birth date differs too" do
-        expect(compared(last_name: "OTHER", date_of_birth: "19800102", **corrected)).to be_mismatched
-      end
+    it "is the person as the payer holds them" do
+      expect([plan.person.first_name, plan.person.last_name, plan.person.born_on])
+        .to eq(["TESTFIRST", "TESTLAST", Date.new(1980, 1, 1)])
     end
 
     context "WHEN the payer named nobody" do
       let(:found) { [found_plan([line], nil)] }
-
-      it "compares nobody" do
-        expect(plan.identify(asked).result.outcome).to eq :not_compared
-      end
 
       it "has no person or relationship" do
         expect([plan.person, plan.relationship]).to eq([nil, nil])
@@ -238,20 +191,16 @@ RSpec.describe EdiGem::MedicalPlan do
     context "WHEN the payer holds another address" do
       let(:found) { [found_plan([line], held.merge(address_line1: "9 Other Road", postal_code: "11111"))] }
 
-      it "is still a match: an address never decides" do
-        expect(plan.identify(asked).result).to be_matched
-      end
-
       it "carries the payer's address" do
         expect(plan.person.address.to_h).to eq(line1: "9 Other Road", postal_code: "11111")
       end
     end
 
-    it "compares each plan apart" do
+    it "reads each plan's person apart" do
       found << found_plan([line.merge(payer_code: "P2", member_id: "OTHER01")], held.merge(first_name: "OTHER"))
 
-      expect(plans.map { |each| [each.member_id, each.identify(asked).result.outcome] })
-        .to eq [["MOCKID0002", :matched], ["OTHER01", :mismatched]]
+      expect(plans.map { |each| [each.member_id, each.person.first_name] })
+        .to eq [%w[MOCKID0002 TESTFIRST], %w[OTHER01 OTHER]]
     end
   end
 
@@ -302,75 +251,14 @@ RSpec.describe EdiGem::MedicalPlan do
     end
   end
 
-  describe "#identification" do
-    it "compares nothing WHEN nobody was asked about" do
-      expect(plan.identification.match).to eq :not_compared
-    end
-
-    it "compares the person matched with who was asked about" do
-      asked_about = EdiGem::Person::Asked.new(**asked)
-
-      expect(EdiGem::Response.new(found_plans: found).medical_plans(asked: asked_about).fetch(0).identification.match)
-        .to eq :matched
-    end
-  end
-
-  describe "the details given beside the core" do
-    let(:asked_about) do
-      EdiGem::Person::Asked.new(**asked, address: EdiGem::Address.new(line1: "1 Example St", postal_code: "40000"),
-                                         ssn: "000-00-1234")
-    end
-    let(:held) do
-      { first_name: "TESTFIRST", last_name: "TESTLAST", date_of_birth: "19800101", address_line1: "1 EXAMPLE ST",
-        postal_code: "40000", ssn: "XXX-XX-1234" }
-    end
-
-    # The plan found, compared with `about`.
-    def plan_for(about) = EdiGem::Response.new(found_plans: found).medical_plans(asked: about).fetch(0)
-
-    it "compares each with the person the payer holds, beside the core" do
-      identification = plan_for(asked_about).identification
-
-      expect([identification.given_fields, identification.match])
-        .to eq([{ address: :matched, ssn_last_four: :matched }, :matched])
-    end
-
-    it "keeps the core's outcome WHEN a given detail differs" do
-      held.merge!(ssn: "XXX-XX-4321")
-      identification = plan_for(asked_about).identification
-
-      expect([identification.given_fields[:ssn_last_four], identification.match, identification.fields.values.uniq])
-        .to eq([:differs, :matched, [:matched]])
-    end
-
-    it "is not_returned for each WHEN the payer holds neither" do
-      %i[address_line1 postal_code ssn].each { |field| held.delete(field) }
-
-      expect(plan_for(asked_about).identification.given_fields)
-        .to eq(address: :not_returned, ssn_last_four: :not_returned)
-    end
-
-    it "is not_compared for each WHEN ours can't be compared, whatever the payer holds" do
-      uncomparable = EdiGem::Person::Asked.new(**asked, address: EdiGem::Address.new(city: "Example"), ssn: "12")
-
-      expect(plan_for(uncomparable).identification.given_fields)
-        .to eq(address: :not_compared, ssn_last_four: :not_compared)
-    end
-
-    # A polled answer whose question could not be recovered is compared with nobody, never with the
-    # caller's record as it stands today.
-    it "compares nothing and gives nothing WHEN asked about nobody" do
-      expect([plan.identification.match, plan.identification.fields.values.uniq, plan.identification.given_fields])
-        .to eq([:not_compared, [:not_returned], {}])
-    end
+  describe "the SSN the payer holds" do
+    let(:held) { { first_name: "TESTFIRST", last_name: "TESTLAST", date_of_birth: "19800101", ssn: "XXX-XX-1234" } }
 
     [false, true].each do |revealed|
-      it "prints no digit of either SSN, the plan or its identification, WHEN EdiGem.reveal is #{revealed}" do
+      it "prints no digit of it, the plan or its person, WHEN EdiGem.reveal is #{revealed}" do
         EdiGem.reveal = revealed
-        plan = plan_for(asked_about)
-        plan.identification
 
-        expect([plan.inspect, PP.pp(plan, +""), plan.identification.inspect, PP.pp(plan.identification, +"")].join)
+        expect([plan.inspect, PP.pp(plan, +""), plan.person.inspect, PP.pp(plan.person, +"")].join)
           .to_not include("1234")
       ensure
         EdiGem.reveal = false

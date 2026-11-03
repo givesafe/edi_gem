@@ -94,74 +94,19 @@ RSpec.describe EdiGem::Inquiry::Discovery do
     expect(inquiry.service_date).to eq("20260901")
   end
 
-  describe "#question" do
-    let(:address) { EdiGem::Address.new(line1: "1 Example St", postal_code: "40000") }
-
-    def question(**fields)
-      given = EdiGem::Subscriber.new(first_name: "José", last_name: "Núñez", date_of_birth: "19800102", **fields)
-      described_class.new(subscriber: given, provider: provider, as_of: Date.new(2026, 9, 1)).question
+  describe "#fingerprint" do
+    def fingerprint(first_name, last_name)
+      given = EdiGem::Subscriber.new(first_name: first_name, last_name: last_name, date_of_birth: "19800102")
+      described_class.new(subscriber: given, provider: provider, as_of: Date.new(2026, 9, 1))
+                     .fingerprint(secret: "s" * 32)
     end
 
-    it "is who was asked about, as given, and the day as a Date" do
-      expect([question.person.to_h, question.as_of])
-        .to eq([{ first_name: "José", last_name: "Núñez", date_of_birth: Date.new(1980, 1, 2) }, Date.new(2026, 9, 1)])
+    it "is the same for any spelling sent the same way" do
+      expect(fingerprint("José", "Núñez")).to eq fingerprint("JOSE", "NUNEZ")
     end
 
-    it "carries the address and the SSN's last four given" do
-      held = EdiGem::Person.new(role: :subscriber, address_line1: "1 EXAMPLE ST", postal_code: "40000",
-                                ssn: "XXX-XX-1234")
-
-      expect(question(address: address, ssn: "000001234").person.given_fields(held))
-        .to eq(address: :matched, ssn_last_four: :matched)
-    end
-
-    it "carries neither WHEN neither was given, and equals today's asked person" do
-      expect(question.person).to eq(EdiGem::Person::Asked.new(first_name: "José", last_name: "Núñez",
-                                                              date_of_birth: Date.new(1980, 1, 2)))
-    end
-  end
-end
-
-RSpec.describe "EdiGem::Inquiry::Eligibility#service_date" do
-  subject(:inquiry) do
-    EdiGem::Inquiry::Eligibility.new(
-      payer_code: "12345",
-      subscriber: EdiGem::Subscriber.new(member_id: "X", last_name: "Y"),
-      provider: EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic"),
-      as_of: as_of
-    )
-  end
-
-  context "WHEN the inquiry named no date" do
-    let(:as_of) { nil }
-
-    it "is nil when the source offered no default" do
-      expect(inquiry.service_date).to be_nil
-    end
-
-    it "takes the source's default when it has one" do
-      expect(inquiry.service_date(default: Date.new(2026, 9, 4))).to eq("20260904")
-    end
-  end
-
-  context "WHEN the inquiry named a date" do
-    let(:as_of) { Date.new(2026, 8, 20) }
-
-    it "writes it as X12 YYYYMMDD rather than ISO" do
-      expect(inquiry.service_date).to eq("20260820")
-    end
-
-    it "ignores the source's default" do
-      expect(inquiry.service_date(default: Date.new(2026, 9, 4))).to eq("20260820")
-    end
-  end
-
-  # A range is a legal X12 date and not a Ruby one, so it passes through as written.
-  context "WHEN the date is already written the way the payer wants it" do
-    let(:as_of) { "20260820-20260930" }
-
-    it "passes it through untouched" do
-      expect(inquiry.service_date).to eq("20260820-20260930")
+    it "differs for a spelling sent otherwise" do
+      expect(fingerprint("José", "Núñez-Ortiz")).to_not eq fingerprint("José", "Núñez Ortiz")
     end
   end
 end

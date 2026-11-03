@@ -52,7 +52,8 @@ stedi = EdiGem::Source::Stedi.new(api_key: key, policy: policy)
 
 Settings merge key by key, so `attempts` alone keeps the source's backoff. Only `retry:` can be
 overridden, with the keys of the `retry` block in `lib/edi_gem/data/sources.yml`
-(`attempts`, `backoff`, `multiplier`, `max_delay`, `jitter`, `retry_on`); an unknown key raises
+(`attempts`, `backoff`, `multiplier`, `max_delay`, `jitter`, `retry_on`, `retry_until_end`: the
+kinds retried until the send's end rather than `attempts` times); an unknown key raises
 `ArgumentError`. An operation that sets its own `retry` in `sources.yml` keeps it.
 
 A Stedi test key reaches test mode on the same host. Optional keywords: `credential:` holds the
@@ -69,11 +70,13 @@ The template must place `$DIRECTION`. The gem fills `$CLEARINGHOUSE`, `$FEATURE`
 `$YYYY`, `$MM`, `$DD`, `$YYYYMM` and `$YYYYMMDD`; any other placeholder is filled from the values
 you pass with each send. Nothing is archived unless a send asks for it.
 
-`archive.fetch(uri)` reads back a body kept at a `Stored` uri, and `stedi.archived_discovery(uri)`
-reads a kept discovery answer into a `Response` again without calling Stedi (see "V1 reference").
+`archive.fetch(uri)` reads back a body kept at a `Stored` uri. `stedi.archived_eligibility(uri)`
+and `stedi.archived_discovery(uri)` read a kept eligibility or discovery answer into a `Response`
+again without calling Stedi, and `stedi.archived(uri, kind:)` names either by its kind (see
+"V1 reference"). A kept answer is read as it was recorded and never asked again.
 
 A write or read the archive cannot complete raises `EdiGem::ArchiveFailed`, as do `archived`,
-`archived_discovery` and `archived_question` when the body cannot be read. **(proposed)** Its
+`archived_eligibility` and `archived_discovery` when the body cannot be read. **(proposed)** Its
 `retryable?` says
 whether the same call may succeed later; the gem does not retry, and when to ask again is the
 caller's to decide:
@@ -104,6 +107,10 @@ An `ArchiveFailed` raised with no flag is not retryable.
 
 ```ruby
 provider = EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic")
+# Stedi: send taxId and address "Only include if required by the payer"; address needs at least
+# address1 and city. Each is left out of the request when nil.
+EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic", tax_id: "000000000",
+                     address: EdiGem::Address.from(line1: "1 Example Way", city: "Los Angeles"))
 subscriber = EdiGem::Subscriber.new(member_id: "ABC123", last_name: "DOE", date_of_birth: "19800101")
 
 # An eligibility check. The payer code is the code this clearinghouse uses for the payer.
@@ -144,9 +151,8 @@ objects. `raw` and the archived bodies are PHI.
 
 A discovery's `found_plans` are the coverages it found, one per item, each read apart: its
 `benefits`, its `people`, and `person`, who the payer matched (the dependent when there is one,
-else the policyholder) as the payer holds them on record, address included. `identify(asked)`
-compares that person with who was asked about, and `coverage_on(date)` applies the two-part test
-to that plan alone. A `Subscriber` takes an `address:` (an `EdiGem::Address`), which Stedi is sent.
+else the policyholder) as the payer holds them on record, address included. `coverage_on(date)`
+applies the two-part test to that plan alone. A `Subscriber` takes an `address:` (an `EdiGem::Address`), which Stedi is sent.
 
 ## Dependents, and who the payer answered about
 
@@ -165,22 +171,19 @@ response = stedi.eligibility(inquiry)
 
 response.subscriber_person   # => #<EdiGem::Person subscriber ...>, the policyholder
 response.dependent_people    # => [#<EdiGem::Person dependent ...>]
-found = response.identify({ first_name: "Leo", last_name: "Garcia", date_of_birth: "20100101" },
-                          as_dependent: true)
-found.person                 # who the payer answered about, or nil
-found.result.outcome         # => :matched, :mismatched or :not_compared
-found.result.fields          # => { first_name: :matched, last_name: :matched, date_of_birth: :differs }
-found.answered_as            # => :dependent, the part of the answer the payer put them in
 ```
 
 A payer may move the patient between the subscriber and dependent parts, or ignore a dependent
-and answer about the subscriber, so `identify` compares the part asked about first, then the
-other. `EdiGem::Identity.compare` is the comparison: names are normalized (accents, case,
-punctuation, CORE 258's suffixes), a last name may be one of two, a first name may drop a second
-name, and a name of at least eight characters may come back cut short. Another name, a nickname
-or a different birth date differs. A payer's 001/25 (it corrected the identity it was sent)
-counts its spelling of the names when the birth date matches. Names are sent as
-`Identity.plain` spells them: no accents, in capitals.
+and answer about the subscriber, so which of the people on an answer is the one asked about is
+the caller's to work out, from both parts. Names are sent as `Identity.payer_normalized` spells
+them: no accents, in capitals, without the characters Stedi refuses (`~ * : ^ >`). Titles (MR,
+DR, ...) are not sent, and a suffix (JR, SR, I, II, III, IV, V) goes in Stedi's `suffix`
+field (X12's NM107), not the last name. A suffix the payer sends apart is read back into
+`Person#last_name` (SMITH JR), so a last name means the same going and coming.
+`Identity.payer_normalized_split`, `surname_words`, `suffix`, `another_spelling`, `unpunctuated` and
+`db_normalized` are the forms a caller compares names from, and `Person#identity_corrected?`
+says the payer corrected the identity it was sent (001/25). A field left nil on the Subscriber is
+not sent, so a caller asks with fewer fields (no first name, or no birth date) by leaving them out.
 
 ## Response states
 
@@ -197,7 +200,17 @@ counts its spelling of the names when the birth date matches. Names are sent as
 An unknown answer is never reported as `no_coverage`. Each `Rejection` has a `level` that says
 who acts: `transport` and `envelope` (the request), `payer`, `provider` (the provider's standing
 with the payer), `subscriber` and `dependent` (the person's identifiers). `retryable?` says
-whether the same request may succeed later.
+whether Stedi says to ask again at once: only a payer that can't answer right now (AAA 42 or 80),
+and not a 42 whose follow-up is C, N or S. `reason_code` is the AAA03 as sent.
+`Response#payer_unavailable?` says the payer couldn't be reached (a 42 Stedi would ask again, an
+80, or a 79, a problem connecting to it), and `#ask_again?` whether any of its refusals is
+`retryable?`: a 79 alone is not asked again, a 42 beside one is. `#resubmission_refused?` says the
+payer refused the request as sent: a 42 whose follow-up is C, N or S, which Stedi reads as a
+problem with the request, for Stedi support, and not as a payer that is down.
+`#our_setup_refused?` says the payer refused our setup, not the person: a 41 (our NPI, tax ID or
+portal credentials) or a T4 (the payer name or ID we sent) in the payer lane, as Stedi reads them.
+Its state stays `payer_silent`; the caller files it as ours. A 41 in the provider's lane is a
+refusal of our provider (`rejected`).
 
 ## What payers and Stedi return, and what the gem relies on (proposed)
 
@@ -216,8 +229,8 @@ What a payer returns about a person:
   at least the first line and the city. "ADDRESS UNKNOWN" is allowed when the payer has none
   (X12 RFI 1934). The returned address "must match the request or be a previous address", so a
   difference may be an old address. `postalCode` has no punctuation (guarantee); whether the
-  address is USPS-standardized is open. That's why `Address#compare` compares only the first
-  line's words and the first five postal digits.
+  address is USPS-standardized is open. That's why the first line's words and the first five
+  postal digits are the parts worth comparing.
 - **An SSN:** a payer must return an identifier only when it was sent and the payer used it to
   find the person (X12 RFI 2119). An SSN that wasn't sent almost never comes back, and whether
   one comes back whole, masked or at all is open. The gem keeps only its last four, as
@@ -238,8 +251,8 @@ How a Stedi discovery searches, and what it gives back:
   coverage is real (an MCO and the state's Medicaid often name each other).
 - **Matching is the caller's:** "false positives are possible, so you're ultimately responsible
   for matching results to your own records." Names may vary; the birth date "must match exactly".
-  The gem compares the first name, last name and birth date (`Identity.compare`), and the address
-  and last four when given (`Identification#given_fields`).
+  The gem gives the name forms to compare from (`Identity`) and the last four as a `LastFour`;
+  the comparison is the caller's.
 - **`confidence`** is `HIGH` or `REVIEW_NEEDED`, and the guide says every coverage is
   `REVIEW_NEEDED`. The gem reads it; nothing relies on it.
 - **Which plan is primary** isn't said by a discovery. A coordination of benefits check does that.
@@ -267,8 +280,9 @@ what doesn't hold as `not_returned` or `not_compared`, never as a match or a dif
 ## V1 reference: what the backend calls
 
 This section is the caller contract for the calls the Samaritan backend makes. It covers
-Stedi and `Source::Mock`, which is Stedi with discovery answered from code. Each object's own
-class comment is the maintainers' reference, and holds the reasons behind its rules.
+Stedi and `Source::Mock`, which is Stedi with discovery answered from code, asking a check once
+unless given `payer_pauses:`. Each object's own class comment is the maintainers' reference, and
+holds the reasons behind its rules.
 
 Parts marked **(proposed)** are in the working tree and have not been reviewed by Danny yet.
 Their contract can still change.
@@ -305,13 +319,20 @@ its kind (`timeout`). No message holds a value from a request or an answer.
 | `unexpected` | false | a failure the gem has no row for |
 
 A `Fault` from an HTTP status carries `status`, and `retry_after`: the vendor's `Retry-After` in
-seconds, or nil.
+seconds, or nil. A real-time check's 400 is read first (`errors.answer_in_status` in
+`data/sources.yml`, `Policy#answer_in_status?`): Stedi answers a payer it can't connect to with a
+400 that holds an AAA 79, so a 400 holding an AAA is a `Response`, read as a 200's is, and one
+holding none is the `malformed_request` it always was.
 
 **Retry.** The gem retries a retryable `Fault` before raising it: 3 attempts, 0.5 s first
 backoff, doubling, at most 20 s, with 25% jitter. A vendor's `Retry-After` wins over the backoff.
 These are the `retry` defaults in `lib/edi_gem/data/sources.yml`, and `Policy.for` can change
-them. A retry sends the same idempotency key, so it is the same billed question. The gem never
-retries an `ArchiveFailed`; the caller decides from `retryable?`.
+them. An operation may set its own: a check retries a 429 until its two minutes end
+(`retry_until_end`), and a discovery send or a batch submit cut short by our own timeout is not
+sent again. A retry sends the same idempotency key. Stedi documents what a key does (kept 24 hours, a
+409 while the first is in progress) for its claim and event endpoints only; its eligibility,
+discovery and batch pages don't mention keys. The gem never retries an `ArchiveFailed`; the caller
+decides from `retryable?`.
 
 ### `eligibility(inquiry, idempotency_key: nil, archive: nil)`
 
@@ -320,17 +341,22 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   `provider`, optional `credential`. `idempotency_key` replaces the one the gem derives from the
   body. `archive:` is nil, or `{ name: "stem" }` plus a value for each placeholder the template
   leaves to the caller.
-- **Outcome.** A settled `Response` (never `pending`). Read it with `identify` and
-  `checked_plan`, whose `finding(on:)` is the check's.
-- **Effects.** One billed POST to Stedi. With `archive:`, the request body (credential fields
-  redacted) and the response body are written under feature `eligibility_check`, and
-  `response.stored` says where.
+- **Outcome.** A settled `Response` (never `pending`). Read it with `checked_plan(identification:)`.
+- **Effects.** One billed POST to Stedi, waited on for up to 125 s: Stedi holds a check open for
+  up to 120 s and warns against cancelling sooner. When the payer can't answer right now and
+  `ask_again?` holds, the gem asks again after each pause (`Source::Stedi::AskingAgain::PAUSES`,
+  1, 5, 10, 20, 30 and 30 s; `payer_pauses:` on `Stedi.new` replaces them, `[]` asks once), each
+  time under `"<key>-r<n>"`, as Stedi says for up to two minutes: no send, a transport retry
+  included, starts once 120 s have passed since the first. Stedi doesn't bill a 42 or an 80. The
+  last answer is returned. With `archive:`, each request body (credential fields
+  redacted) and response body is written under feature `eligibility_check`, and
+  `response.stored` says where the last went.
 - **Failures.** The shared table. An `ArchiveFailed` on the write comes after the answer was
   billed; the `Response` is not returned.
-- **Retry.** The gem's, above. **(proposed)** `inquiry.idempotency_key(secret:, on:,
+- **Retry.** The gem's, above, within the same two minutes. A 429 is retried until they end, past
+  `attempts`: Stedi lists a 429 as a 42, retried for up to two minutes. **(proposed)** `inquiry.idempotency_key(secret:, on:,
   clearinghouse:)` gives one key per question per caller's day, and `inquiry.fingerprint(secret:,
-  clearinghouse:)` one key per question on any day (`EdiGem::RequestKey`). Stedi remembers a key
-  for 24 hours.
+  clearinghouse:)` one key per question on any day (`EdiGem::RequestKey`).
 
 ### `discovery(inquiry, idempotency_key: nil, archive: nil)` and `resolve(handle, archive: nil)`
 
@@ -340,13 +366,16 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
   pending `Response`.
 - **Outcome.** A `Response`. `pending` with a `handle` when Stedi has not finished; call
   `resolve(handle)` later. Otherwise settled: `no_coverage` when Stedi found nothing. Read it with
-  `medical_plans(asked:)`, each plan by its `finding(on:)`; with no plan, `Finding.of_search`.
+  `medical_plans`, and with no plan by its `state`.
 - **Effects.** `discovery` is one billed POST; `resolve` is a GET. The gem sends at most one
   discovery a second (a burst of 2), with a 130 s timeout. With `archive:`, each call writes under feature `discovery`: the
   POST writes a request and a response, and a GET writes a response only (`request_uri` nil).
 - **Failures.** The shared table. A discovery Stedi gave up on (status `ERROR`) raises
   `Fault` `vendor_error` after its body is written.
-- **Retry.** The gem's, above. **(proposed)** `inquiry.idempotency_key(secret:, on:)` and
+- **Retry.** The gem's, above, except a timeout: a send cut short by our own timeout is not sent
+  again, since the first may still be running and Stedi documents no key for discovery. A poll
+  (`resolve`) is a read, and is retried as by default, a timeout included. **(proposed)**
+  `inquiry.idempotency_key(secret:, on:)` and
   `inquiry.fingerprint(secret:)`, as for a check. When to call `resolve` again is the caller's.
 
 ### Batch: `submit_batch`, `batch_status`, `batch_checks`, `batch_results`
@@ -354,31 +383,32 @@ retries an `ArchiveFailed`; the caller decides from `retryable?`.
 - **Inputs.** `submit_batch(inquiries, name: nil, idempotency_key: nil, max_retry_hours: nil)`:
   a Hash of your identifier to `Inquiry::Eligibility` (an Array is keyed by position), up to
   10,000. The others take the batch id, and `batch_checks` and `batch_results` take `page_token:`,
-  `page_size:` and `archive:`.
+  `page_size:`, `archive:` and `only:` (identifiers: the items sent under those alone are read and
+  filed, so a caller that took some answers already reads only the rest).
 - **Outcome.** `Batch::Submission` (`id` to keep), `Batch::Status`, `Batch::Checks` (each item's
   state) and `Batch::Answers` (each finished item's full answer as a `Response`). A nil
   `next_page_token` is the only sign the listing is complete.
 - **Effects.** Each check is billed as a real-time check. With `archive:`, each item is its own
   object named `<name>_<identifier>`, under feature `batch_check` or `batch_result`. Every name is
   checked before the first write, so a page is filed whole or not at all.
-- **Failures and retry.** The shared table and the gem's retry. Stedi keeps retrying a silent
-  payer for `max_retry_hours` (8 by default, up to 24).
+- **Failures and retry.** The shared table and the gem's retry, except that a submit cut short by
+  our own timeout is not sent again: Stedi doesn't say a second submit makes no second batch. Stedi
+  keeps retrying a silent payer for `max_retry_hours` (8 by default, up to 24).
 
-### `archived(uri)`, `archived_discovery(uri)` and `archived_question(uri)`
+### `archived(uri, kind:)`, `archived_eligibility(uri)` and `archived_discovery(uri)`
 
-`archived` **(proposed)** is the common name for `archived_discovery`. `archived_question` is
-**(proposed)**.
+`archived` **(proposed)** is the common name for both readers: `kind: :eligibility` reads with
+`archived_eligibility`, `kind: :discovery` with `archived_discovery`. `kind` has no default; any
+other kind raises `ArgumentError`.
 
-- **Inputs.** A `Stored` uri: `response_uri` for `archived` and `archived_discovery`,
-  `request_uri` for `archived_question`.
-- **Outcome.** `archived` gives the kept discovery answer as a `Response`, read as it was the day
-  it came. `archived_question` gives the question the kept request asked, as an
-  `Inquiry::Question`.
+- **Inputs.** A `Stored` uri: its `response_uri`.
+- **Outcome.** The kept eligibility or discovery answer as a `Response`, read as it was recorded the day
+  it came; it is never asked again. Its one exchange is the archive's read: a `get` of the uri, status
+  200, no headers.
 - **Effects.** One archive read. Nothing is sent to Stedi, and nothing is billed.
 - **Failures.** `ArchiveNotConfigured` with no archive. `ArchiveFailed` when the body cannot be
   read, or the uri (nil included) is not one this archive made; `retryable?` is in the archive
-  table above. `UnreadableBody` when the body is not a discovery request (`archived_question`) or
-  not JSON. A source with no discovery raises `FeatureNotSupported`.
+  table above. `UnreadableBody` when the body is not JSON. A source without the feature `kind` names raises `FeatureNotSupported`.
 - **Retry.** None in the gem. A caller may read again when `retryable?` is true. **(proposed)**
 
 ### `MedicalPlan#payer_id` (proposed)
@@ -401,6 +431,8 @@ response.stored            # => #<struct EdiGem::Archive::Stored request_uri="s3
 response.trace_id          # => "00000000-0000-4000-8000-000000000001"
 response.application_mode  # => "test"
 response.error_code        # => nil
+response.error_summary     # => nil
+response.deciding_rejection&.summary  # => "AAA 62 at subscriber, follow-up C" on a refused answer
 ```
 
 | field | type | values and presence |
@@ -414,21 +446,29 @@ response.error_code        # => nil
 | `stored` | `Archive::Stored` or nil | nil when the call did not ask to archive |
 | `trace_id` | String or nil | the id to quote to the vendor or payer |
 | `application_mode` | String or nil | `"test"` or `"production"`, as the vendor labels it. Stedi labels every discovery `"production"` |
-| `error_code` **(proposed)** | String or nil | the first rejection's code: a reason name (`"name_mismatch"`) or the payer's raw code when the gem has no name for it. nil with no rejection |
+| `deciding_rejection` **(proposed)** | `Rejection` or nil | the refusal that decided `state`, read in the state's own order: one about our provider, then one of the request (transport or envelope); the person's when the payer can't tell who they are; the payer's (refused as sent or our setup, then unreached, then its first); then the person's that `PersonRefusal::FINDINGS` reads; else the first. Not the first one listed: a payer can list a refusal that decides nothing ahead of the one that does. nil with no rejection |
+| `error_code` **(proposed)** | String or nil | the deciding rejection's code: a reason name (`"name_mismatch"`) or the payer's raw code when the gem has no name for it. nil with no rejection |
+| `error_summary` **(proposed)** | String or nil | the deciding rejection in codes alone (`Rejection#summary`). nil with no rejection |
+
+A `Rejection` carries its reason (`code`), the AAA03 as sent (`reason_code`), its lane (`level`)
+and its follow-up (`followup`, AAA04, as X12's letter or Stedi's words). `summary` says it in
+codes alone, "AAA 62 at subscriber, follow-up C": the AAA03 (or the codec's reason when none came),
+the lane, and the follow-up as its letter. It never carries Stedi's `description` or `resolution`,
+which are free text that may repeat what we sent about the person, so it is safe to store and log.
 
 **(proposed)** Readers:
 
-- `identify(asked, as_dependent: false)`: an `Identification` for a check's people. `asked` is a
-  hash of `first_name`, `last_name` and `date_of_birth`.
-- `checked_plan(identification:)`: the check's plan, as a `CheckedPlan`, for the person
-  `identification` names. Its `finding(on:)` is the check's `Finding` on the day `on`.
-- `medical_plans(asked: nil)`: a discovery's `MedicalPlan`s. `asked` is the `Person::Asked`
-  each plan is compared with.
+- `checked_plan(identification:)`: the check's plan, as a `CheckedPlan`. `identification` is who
+  the caller reads the answer to be about: anything answering `answered_as` and `match`.
+- `medical_plans`: a discovery's `MedicalPlan`s.
 - `provider_standing`: what the answer says of our provider's standing with the payer.
-  `:refused` when any refusal is about our provider (`provider_refusals`), whatever else came
-  back; `:accepted` when the payer answered for it (`complete`, `partial` or `no_coverage`); nil
-  when it did neither (`payer_silent`, `not_identified`, `pending`, or `rejected` for a reason
-  that is not our provider).
+  `:needs_provider_details` when every refusal about our provider asks for our tax ID and address
+  (`Rejection#provider_details_wanted?`: an AAA 97 in any lane, or an AAA 15 in the provider's);
+  `:refused` when any other refusal is about our provider (`provider_refusals`), whatever else came
+  back; `:not_connected` when Stedi couldn't connect to the payer (an AAA 79) and nothing beside it
+  says to ask again (`not_connected?`); `:accepted` when the payer answered for it (`complete`, `partial`, `no_coverage`, or
+  `not_identified`, since the payer looked the person up for our provider); nil when it did neither
+  (`payer_silent`, `pending`, or `rejected` for a reason that is not our provider).
 
 ### `Coverage` and its `Finding`
 
@@ -453,64 +493,16 @@ pending codes), or nil. It takes a stored code as well as a finding's.
 
 The words a record shows for a code (its "context") are the backend's, not the gem's.
 
-### `Finding`: what the answer established (proposed)
-
-`EdiGem::Finding` is what an answer established about the person asked about, asked the way they
-were asked: one name, and the code behind it. It is the meaning only. What to do with it is the
-caller's, and depends on the moment (a check with the person there, a recheck without them, a
-discovery). `Finding::NAMES` lists the names, so a caller can check it handles every one.
-
-```ruby
-finding = plan.finding(on: Date.new(2026, 10, 22))
-finding.name      # => :covered
-finding.code      # => "1"
-finding.covered?  # => true
-finding.to_s      # => "covered"
-```
-
-| name | meaning |
-|---|---|
-| `covered` | an active line (EB01 `1` to `5`) covers the person on the day |
-| `not_covered` | an inactive line (`6` to `8`), not covered (`I`), the day outside the plan's dates, a date of death before the day (`61`), or an answer with no lines: not covered on this plan. They may have another |
-| `someone_else` | the answer is about a person who isn't the one asked (our name and birth date comparison): the ID is real and someone's, and says nothing of our person |
-| `held_differently` | the payer found the ID but holds the person under another birth date (AAA `71`, `58`) or name (`73`, `65`). Not certainly someone else |
-| `not_on_this_id` | the person isn't on the payer's books under this ID: the ID invalid (`72`, `64`), not found (`75`, `67`, `77`), more than one match (`76`, `68`), or not in this group or plan (`78`). Not a denial |
-| `provider_refused` | the payer won't answer our provider. Nothing about the person |
-| `no_answer` | the payer was silent, couldn't process (`V`), or no line decides |
-| `our_fault` | our request was refused at the transport or envelope, or for what we sent in it (`15`, `33`, `56`, `57`, `60`, `62`, `63`): we didn't ask properly |
-| `pending` | an asynchronous answer that hasn't arrived |
-
-| field | type | values and presence |
-|---|---|---|
-| `name` | Symbol | one of `NAMES`; each has a predicate (`covered?`, `not_on_this_id?`, ...) |
-| `code` | String, Symbol or nil | the EB01 code of the line that decided; for a refusal, its reason (a `Codec::REJECT_REASON` name, or the raw code the codec didn't name); nil otherwise |
-| `inactive?` | Boolean | whether the plan's own lines say it is inactive on the day (`6` to `8`, or the day outside the plan's dates): a `not_covered` that was covered and no longer is. False when no line decided |
-| `line_code` | String or nil | the EB01 code of the line that decided, to record beside the finding; nil when the state, a refusal or the person decided, or the plan's dates or an implied term did |
-
-Where a finding comes from:
-
-- `CheckedPlan#finding(on:)` (`Finding.of_check`): a check's answer about the person its
-  `identification` names. The answer's state decides first (pending, refused, not identified,
-  silent); then an answer about someone else is `someone_else`, and otherwise the coverage on the day.
-- `MedicalPlan#finding(on:)` (`Finding.of_coverage`): a plan a discovery found, always about the
-  person the plan names, whoever was asked: `covered`, `not_covered` or `no_answer`. Whether that
-  person is the one asked about is the plan's `identification`.
-- `Finding.of_search(response)`: a discovery that found no plan, by its state: `pending`,
-  `provider_refused` or `our_fault` when refused, `no_answer` when silent, `not_covered` otherwise.
-  A discovery that found plans is read plan by plan; which plans decide is the caller's.
-
-The AAA codes in the person's lanes are read by one table, `PersonRefusal::FINDINGS`, which both
-the answer's state and its finding ask. A refusal of what we sent decides only when no line came
-with it; beside lines it refused part of the question (`partial`).
-
-A caller that records one word per answer derives it from the finding: `inactive?` tells a plan
-that ended from one never covered, and a refusal of the person (`held_differently`) is never a
-denial. An error is never a lapse.
-
-**A name the payer corrected.** When the payer says it corrected the identity it was sent
-(`Person#identity_corrected?`, `001` with `25`) and the birth date matched, a first or last name
-that differs counts as matched. `Identity::Result#corrected` names the fields that passed only that
-way (empty otherwise), so a caller can show them as corrected rather than matched.
+The AAA codes in the person's lanes are read by one table, `PersonRefusal::FINDINGS`, which the
+answer's state asks. A refusal of what we sent decides only when no line came with it; beside
+lines it refused part of the question (`partial`). Two reasons there are read apart from their
+neighbors: AAA 60 is `birth_date_after_day_asked` (the birth date falls after the day asked),
+apart from 62 and 63's `date_out_of_range` (the day asked is outside the payer's window); and 64 is
+`dependent_id_required` (the payer needs another identifier for a dependent, which Stedi says is
+ours to send), apart from 72's `member_id_invalid`; and 58 is `invalid_date_of_birth` (the birth
+date missing or not written YYYYMMDD, which Stedi says to send), apart from 71's
+`date_of_birth_mismatch` (a birth date the payer holds differently). All three are what we sent
+(`our_fault`).
 
 ### Plans: `CheckedPlan` and `MedicalPlan` (proposed)
 
@@ -518,7 +510,7 @@ A check's answer (`Response#checked_plan`) and each medical plan a discovery fou
 (`Response#medical_plans`) are read the same way (`EdiGem::AnsweredPlan`):
 
 ```ruby
-plan = response.medical_plans(asked: question.person).first
+plan = response.medical_plans.first
 plan.payer_code                      # => "EXAMPLE1"
 plan.member_id                       # => "MOCK00000002"
 plan.medicaid_id                     # => nil
@@ -526,27 +518,27 @@ plan.plan_name                       # => "Example Gold PPO"
 plan.status_on(Date.new(2026, 9, 1)) # => :active
 plan.plan_begins_on                  # => #<Date: 2026-01-01>
 plan.relationship                    # => :self
-plan.identification.match            # => :matched
 ```
 
 | field | type | values and presence |
 |---|---|---|
 | `payer_code` | String or nil | the payer's code as the answer gives it |
 | `member_id` | String or nil | the subscriber's insurance ID; a dependent is on the subscriber's |
+| `prior_member_id` | String or nil | the ID `member_id` replaced, when the payer names it (X12 REF Q4, Stedi's `planInformation.priorIdNumber`); as sent, so it may equal `member_id` |
 | `medicaid_id` | String or nil | the state Medicaid ID tied to the plan |
 | `plan_name`, `plan_number`, `group_number` | String or nil | as the payer names them; nil when the answer holds none |
 | `status_on(date)` | Symbol | `:active`, `:inactive`, or `:unknown` when the plan's lines say neither. Not knowing is not a denial |
 | `coverage_on(date)` | `Coverage::Finding` | the finding behind `status_on`; its `code` is the status code |
-| `plan_begins_on`, `plan_ends_on` | Date or nil | the plan's own dates; nil when none, or not a real YYYYMMDD day |
+| `plan_begins_on`, `plan_ends_on` | Date or nil | the plan's own dates; nil when none, or not a real YYYYMMDD day; an end in the year 9999 (a payer's placeholder until the plan ends) is nil |
 | `relationship` | Symbol or nil | `:self` or `:dependent`, as the payer said; nil when it did not say, nobody was compared, or the payer refused the person |
-| `identification` | `Identification` | who the payer answered about, compared with who was asked |
 | `lines` | Array of `AnsweredPlan::Line` | `benefit_type`, `service_types`, `insurance_type`, `plan_name`, `in_network` (nil when the payer did not say); empty when none |
 
-A `CheckedPlan` also has `finding(on:)` (Readers, above), which weighs who the payer answered
-about. A `MedicalPlan` also has `payer_id` (above), `person` (whose
+A `CheckedPlan` also has `identification`, as passed to `checked_plan`, which decides its
+`relationship`. A `MedicalPlan` also has `payer_id` (above), `person` (whose
 `address` is the one the payer holds) and `benefits`. Dental and vision plans are not medical
-plans. A Medicaid plan another plan names as its primary payer is
-part of that plan, not a plan of its own.
+plans. A Medicaid plan another plan names as its primary payer (its `Primary Payer` related
+entity, by payer code or by name, case and spacing aside) is part of that plan, not a plan of
+its own.
 
 ### `Person`
 
@@ -574,49 +566,10 @@ person.address&.postal_code # => "00000"
 | `address` | `Address` or nil | the one the payer holds |
 | `ssn_last_four` **(proposed)** | `LastFour` or nil | compared only; it never gives its digits back |
 
-### `Identification`
+### `Person::Asked` (proposed)
 
-Who the payer answered about, and how they compare with who was asked. `person` and `result` (an
-`Identity::Result`) are reviewed; the rest of this table is **(proposed)**.
-
-```ruby
-id = response.identify({ first_name: "Jordan", last_name: "Example", date_of_birth: "19900101" })
-id.match         # => :mismatched
-id.fields        # => { first_name: :matched, last_name: :matched, date_of_birth: :differs, member_id: :not_returned }
-id.reason        # => :identity_mismatch
-id.answered_as   # => :subscriber
-id.given_fields  # => {}
-```
-
-| field | type | values and presence |
-|---|---|---|
-| `person` | `Person` or nil | nil when the answer named nobody |
-| `match` | Symbol | `:matched`, `:mismatched` or `:not_compared`. A payer's refusal of the person wins over our comparison |
-| `fields` | Hash | `first_name`, `last_name`, `date_of_birth`, each `:matched`, `:differs` or `:not_returned` (nothing to compare). A check's also has `member_id`, which only a payer's refusal can make `:differs`. A discovery's has no `member_id` key |
-| `given_fields` | Hash | `address` and `ssn_last_four`, only for details the question carried; a detail it left out has no key. Each `:matched`, `:differs`, `:not_compared` (ours can't be compared) or `:not_returned` (the payer's can't). Empty on a check. They never change `match` |
-| `reason` | Symbol or nil | `:date_of_birth_mismatch`, `:name_mismatch`, `:member_id_invalid` or `:not_found` from a refusal; `:identity_mismatch` from our comparison; nil when it matched or nothing was compared |
-| `answered_as` | Symbol or nil | `:subscriber` or `:dependent`; nil when nobody was compared or the payer refused |
-
-The name and birth date rules are in "Dependents, and who the payer answered about" above.
-**(proposed)** The address rule (`Address#compare`) compares the first line's words and the
-first five postal digits only.
-
-### `Inquiry::Question` and `Person::Asked` (proposed)
-
-What a discovery asked, from `Inquiry::Discovery#question` or `archived_question`:
-
-```ruby
-question = stedi.archived_question(stored.request_uri)
-question.as_of                 # => #<Date: 2026-09-01>
-question.person.first_name     # => "JORDAN"
-question.person.date_of_birth  # => #<Date: 1990-01-01>
-question.person.address        # => #<EdiGem::Address line1,postal_code> or nil
-```
-
-`as_of` is a Date and always set. `person` is a `Person::Asked`: `first_name`, `last_name`,
-`date_of_birth` (a Date, or nil when the kept body's is not a real day), `address` (or nil), and
-only the last four of an SSN, which it never gives back. A recovered question's names are as they
-were sent: in capitals, without accents.
+Who a caller asks about, as the caller holds them: `first_name`, `last_name` and `date_of_birth`
+(a Date). Its names are as given. `subscriber(member_id:)` gives it as the payer is sent it.
 
 ### `Archive::Stored`
 
@@ -644,10 +597,9 @@ Every source subclasses `EdiGem::Source::Base`:
 - `eligibility(inquiry, idempotency_key: nil, archive: nil)`
 - `discovery(inquiry, idempotency_key: nil, archive: nil)` and `resolve(handle, archive: nil)`
 - `submit_batch(inquiries, name: nil, idempotency_key: nil, **options)`, `batch_status(batch_id)`,
-  `batch_checks(batch_id, page_token: nil, page_size: nil, archive: nil)`,
-  `batch_results(batch_id, page_token: nil, page_size: nil, archive: nil)`
-- `archived(response_uri)` and `archived_question(request_uri)`, which need discovery
-  **(proposed)**
+  `batch_checks(batch_id, page_token: nil, page_size: nil, archive: nil, only: nil)`,
+  `batch_results(batch_id, page_token: nil, page_size: nil, archive: nil, only: nil)`
+- `archived(response_uri, kind:)`, which needs the feature `kind` names **(proposed)**
 - `payers(term)` and `payer_id_for(payer_code)`, the payer directory **(proposed)**
 
 A feature a source does not support raises `EdiGem::FeatureNotSupported`. To add a

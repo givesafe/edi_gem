@@ -72,9 +72,24 @@ RSpec.describe EdiGem::Person do
     expect(person.address).to be_nil
   end
 
-  it "gives the fields an identity comparison reads" do
-    expect(person.identity).to eq(first_name: "TESTFIRST", last_name: "TESTLAST",
-                                  date_of_birth: "20100101")
+  it "holds the names and birth date as the payer sent them" do
+    expect([person.first_name, person.last_name, person.date_of_birth]).to eq(%w[TESTFIRST TESTLAST 20100101])
+  end
+
+  it "holds a suffix the payer sent apart as part of the last name" do
+    expect(described_class.new(role: :subscriber, last_name: "TESTLAST", suffix: "JR").last_name).to eq("TESTLAST JR")
+  end
+
+  it "reads the suffix of a 271's NM107 into the last name" do
+    body = x12_271("GS*HB*SENDER*RECEIVER*20260903*1200*1*X*005010X279A1~",
+                   "ST*271*0001~", "HL*1**20*1~", "NM1*PR*2*EXAMPLE HEALTH PLAN*****PI*38333~",
+                   "HL*2*1*21*1~", "NM1*1P*2*EXAMPLECLINIC*****XX*1999999984~",
+                   "HL*3*2*22*0~", "NM1*IL*1*LOVELACE*ADA***JR*MI*MEM123~", "EB*1**30~",
+                   "SE*8*0001~", "GE*1*1~", "IEA*1*000000001~")
+    reading = EdiGem::Reading.new(document: EdiGem::Payload.new(body: body, dialect: :x12).document,
+                                  schema: EdiGem::Schema.fetch(:x12_271))
+
+    expect(reading.people.first.last_name).to eq("LOVELACE JR")
   end
 
   it "prints which fields it holds, never their values" do
@@ -94,8 +109,8 @@ RSpec.describe EdiGem::Person do
     let(:found) { described_class.new(role: :subscriber, first_name: "TESTFIRST", ssn: "XXX-XX-1234") }
 
     it "keeps only the last four, which compare and never read back" do
-      expect([found.ssn_last_four.compare(EdiGem::LastFour.of("1234")), found.ssn_last_four.to_s])
-        .to eq([:matched, "#<EdiGem::LastFour>"])
+      expect([found.ssn_last_four == EdiGem::LastFour.of("1234"), found.ssn_last_four.to_s])
+        .to eq([true, "#<EdiGem::LastFour>"])
     end
 
     it "is nil WHEN the payer sent none" do
@@ -131,8 +146,8 @@ RSpec.describe EdiGem::Person do
       inquiry = EdiGem::Inquiry::Discovery.new(subscriber: asked, provider: clinic, as_of: "20260901")
       people = source.discovery(inquiry).found_plans.first.people
 
-      expect(people.map { |each| each.ssn_last_four.compare(EdiGem::LastFour.of(each.dependent? ? "4321" : "1234")) })
-        .to eq(%i[matched matched])
+      expect(people.map { |each| each.ssn_last_four == EdiGem::LastFour.of(each.dependent? ? "4321" : "1234") })
+        .to eq([true, true])
     end
   end
 end

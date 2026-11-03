@@ -40,10 +40,6 @@ RSpec.describe "AAA03 reject reasons, against Stedi's published enum" do
       expect(rejection.code).to eq(:payer_unavailable)
     end
 
-    it "is recognised" do
-      expect(rejection).to be_recognised
-    end
-
     it "can be retryable" do
       expect(rejection).to be_retryable
     end
@@ -57,10 +53,6 @@ RSpec.describe "AAA03 reject reasons, against Stedi's published enum" do
 
     it "keeps the wire value, because inventing a meaning is the expensive kind of wrong" do
       expect(rejection.code).to eq("AA")
-    end
-
-    it "says it is not recognised rather than looking like an ordinary refusal" do
-      expect(rejection).to_not be_recognised
     end
 
     # The follow-up says a resubmission is allowed, and we still refuse to call it retryable:

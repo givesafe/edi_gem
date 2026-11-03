@@ -8,7 +8,9 @@ module EdiGem
   # 19 child, 20 employee, 21 unknown, 39 organ donor, 40 cadaver donor, 53 life partner or G8
   # other. A dependent's member_id is never sent: theirs is the subscriber's. The maintenance
   # codes 001 and 25 say the payer changed identifying information it was sent (CAQH CORE 258
-  # returns the name it holds this way). `address` is the one the payer holds, or nil.
+  # returns the name it holds this way). `address` is the one the payer holds, or nil. A
+  # suffix the payer sends apart is part of the last name (SMITH JR), as it is when we
+  # ask: a JR is another person.
   class Person
     include Concealed
 
@@ -28,6 +30,8 @@ module EdiGem
     def initialize(role:, **fields)
       @role = role
       FIELDS.each { |field| instance_variable_set(:"@#{field}", fields[field]) }
+      suffix = fields[:suffix]
+      @last_name = "#{@last_name} #{suffix}" if @last_name && suffix
       @address = Address.from(**ADDRESS_FIELDS.to_h { |from, to| [to, fields[from]] })
       @ssn_last_four = LastFour.of(fields[:ssn])
     end
@@ -50,11 +54,6 @@ module EdiGem
     # The birth date as a Date. The payer sends YYYYMMDD, and sometimes nothing or no date at all,
     # which is nil.
     def born_on = Codec.day(@date_of_birth.to_s.delete("-"))
-
-    # What Identity.compare reads.
-    def identity
-      { first_name: @first_name, last_name: @last_name, date_of_birth: @date_of_birth }
-    end
 
     def concealed_inspect
       set = FIELDS.select { |field| public_send(field) }

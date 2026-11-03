@@ -44,11 +44,13 @@ module EdiGem
       SEARCHABLE.select { |field| public_send(field) }
     end
 
-    # Names go as Identity.plain spells them: payers differ on accents, so none are sent.
+    # Names go as Identity spells them for a payer: payers differ on accents, so none are sent, and
+    # titles aren't either. A suffix goes in Stedi's suffix field, not the last name.
     def to_h
-      { memberId: @member_id, firstName: Identity.plain(@first_name),
-        lastName: Identity.plain(@last_name), dateOfBirth: @date_of_birth, gender: @gender,
-        ssn: @ssn, groupNumber: @group_number, address: @address&.to_stedi_h }.compact
+      last_name, suffix = Identity.payer_sent_last_name(@last_name)
+      { memberId: @member_id, firstName: Identity.payer_sent(@first_name), lastName: last_name,
+        suffix: suffix, dateOfBirth: @date_of_birth, gender: @gender, ssn: @ssn,
+        groupNumber: @group_number, address: @address&.to_stedi_h }.compact
     end
 
     # The X12 code for a dependent's relationship, or nil when it is not one a 270 can name.

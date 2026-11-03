@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "date"
-require "pp"
 
 RSpec.describe EdiGem::Person::Asked do
   let(:person) { described_class.new(first_name: "José", last_name: "Núñez", date_of_birth: Date.new(1980, 1, 2)) }
@@ -39,73 +38,33 @@ RSpec.describe EdiGem::Person::Asked do
       .to have_attributes(date_of_birth: nil, relationship: nil)
   end
 
+  it "has another spelling WHEN a name holds an accented letter written another way too" do
+    expect([person, person.with(last_name: "Müller"), person.with(first_name: "Đuro"), person.with(first_name: "Peña")]
+             .map(&:another_spelling?)).to eq([false, true, true, false])
+  end
+
+  it "spells both names the other way" do
+    expect(person.with(first_name: "Đuro", last_name: "Müller").another_spelling.to_h)
+      .to include(first_name: "JURO", last_name: "MUELLER")
+  end
+
+  it "is punctuated WHEN a name holds an apostrophe or hyphen" do
+    expect([person, person.with(last_name: "O'Brien"), person.with(first_name: "Mary-Ann")].map(&:punctuated?))
+      .to eq([false, true, true])
+  end
+
+  it "is asked without punctuation as a payer holding the names that way would" do
+    unpunctuated = person.with(first_name: "D'Andre", last_name: "O'Brien-Smith").unpunctuated
+
+    expect(unpunctuated.to_h)
+      .to eq(first_name: "DANDRE", last_name: "OBRIEN SMITH", date_of_birth: Date.new(1980, 1, 2))
+  end
+
   it "names nobody WHEN inspected or printed" do
     expect([person.inspect, person.to_s]).to all(eq "#<EdiGem::Person::Asked>")
   end
 
   it "cannot be changed in place" do
     expect(person).to be_frozen
-  end
-
-  describe "the details given beside the core" do
-    let(:address) { EdiGem::Address.new(line1: "1 Example St", postal_code: "40000") }
-    let(:given) { person.with(address: address, ssn: "000-00-1234") }
-
-    def held(**fields)
-      EdiGem::Person.new(role: :subscriber, address_line1: "1 EXAMPLE ST", postal_code: "40000", ssn: "XXX-XX-1234",
-                         **fields)
-    end
-
-    it "keeps the core apart: to_h and complete? read only the names and birth date" do
-      expect([given.to_h, given.complete?]).to eq([person.to_h, true])
-    end
-
-    it "equals one asked before either could be given WHEN it carries neither" do
-      today = described_class.new(first_name: "José", last_name: "Núñez", date_of_birth: Date.new(1980, 1, 2))
-
-      expect([person == today, person.hash == today.hash, person.address]).to eq([true, true, nil])
-    end
-
-    it "isn't equal to the same core given other details" do
-      expect([given == person, given == given.with(ssn: "4321"), given == given.with(first_name: "José")])
-        .to eq([false, false, true])
-    end
-
-    it "keeps them through #with" do
-      expect([given.with(first_name: "Joe").given_fields(held), given.with(first_name: "Joe").address])
-        .to eq([{ address: :matched, ssn_last_four: :matched }, address])
-    end
-
-    it "compares each with the person the payer holds" do
-      expect(given.given_fields(held(postal_code: "40001", ssn: "XXX-XX-4321")))
-        .to eq(address: :differs, ssn_last_four: :differs)
-    end
-
-    it "is not_returned for each WHEN the payer holds neither, or named nobody" do
-      expect([given.given_fields(EdiGem::Person.new(role: :subscriber)), given.given_fields(nil)])
-        .to all(eq(address: :not_returned, ssn_last_four: :not_returned))
-    end
-
-    it "is not_compared for each WHEN ours can't be compared, which is not the payer's lack" do
-      unreadable = person.with(address: EdiGem::Address.new(city: "Example"), ssn: "000-00-XXXX")
-
-      expect([unreadable.given_fields(held), unreadable.given_fields(nil)])
-        .to all(eq(address: :not_compared, ssn_last_four: :not_compared))
-    end
-
-    it "names only the details it carries" do
-      expect([person.given_fields(held), person.with(address: address).given_fields(held)])
-        .to eq([{}, { address: :matched }])
-    end
-
-    [false, true].each do |revealed|
-      it "prints no digit of the SSN WHEN EdiGem.reveal is #{revealed}" do
-        EdiGem.reveal = revealed
-
-        expect([given.inspect, given.to_s, PP.pp(given, +"")].join).to_not include("1234")
-      ensure
-        EdiGem.reveal = false
-      end
-    end
   end
 end

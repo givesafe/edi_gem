@@ -28,13 +28,19 @@ module EdiGem
         # One search per code for the source's lifetime: the answer, nil included, is remembered.
         # A failed search raises (Fault, UnreadableBody) and is not remembered.
         def payer_id_for(payer_code)
+          listed_payer_for(payer_code)&.code
+        end
+
+        # The one ListedPayer that answers to a code or alias, by the same rules and the same
+        # remembered search as #payer_id_for, or nil.
+        def listed_payer_for(payer_code)
           return if EdiGem.blank?(payer_code)
 
           code = payer_code.to_s
-          @payer_ids ||= {}
-          return @payer_ids[code] if @payer_ids.key?(code)
+          @listed_payers ||= {}
+          return @listed_payers[code] if @listed_payers.key?(code)
 
-          @payer_ids[code] = listed_payer_id(code)
+          @listed_payers[code] = answering_payer(code)
         end
 
         private
@@ -43,10 +49,9 @@ module EdiGem
         # message (answers_to?, code?); the choice is among several, which no one ListedPayer
         # holds, so the calls reek counts are on the list it searched.
         # :reek:FeatureEnvy
-        def listed_payer_id(code)
+        def answering_payer(code)
           answering = payers(code).select { |payer| payer.answers_to?(code) }
-          found = answering.find { |payer| payer.code?(code) } || (answering.first if answering.one?)
-          found&.code
+          answering.find { |payer| payer.code?(code) } || (answering.first if answering.one?)
         end
       end
     end

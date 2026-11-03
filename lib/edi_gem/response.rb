@@ -17,18 +17,19 @@ module EdiGem
     # An unknown answer is never reported as no coverage.
     STATES = %i[complete partial no_coverage not_identified payer_silent rejected pending].freeze
 
-    # The states in which the payer answered for our provider: benefits, or a settled no coverage.
-    PROVIDER_ACCEPTED = %i[complete partial no_coverage].freeze
+    # The states in which the payer answered for our provider: benefits, a settled no coverage, or a person it
+    # looked up and could not match.
+    PROVIDER_ACCEPTED = %i[complete partial no_coverage not_identified].freeze
 
     TEST_MODE = "test"
 
     attr_reader :benefits, :rejections, :payload, :exchanges, :handle, :details, :stored,
-                :people, :found_plans
+                :archive_failure, :people, :found_plans
 
     # One field for each part of an answer, so it runs one line past the length rule.
     def initialize(benefits: [], rejections: [], payload: nil, exchanges: [], handle: nil, # rubocop:disable Metrics/MethodLength
-                   state: nil, details: {}, settled: false, stored: nil, people: [], found_plans: [],
-                   directory: nil)
+                   state: nil, details: {}, settled: false, stored: nil, archive_failure: nil,
+                   people: [], found_plans: [], directory: nil)
       @benefits = benefits
       @rejections = rejections
       @people = people
@@ -40,11 +41,13 @@ module EdiGem
       @details = details
       @settled = settled
       @stored = stored
+      @archive_failure = archive_failure
       @directory = directory
     end
 
     # `stored` is the Archive::Stored for the raw bodies when the send asked to archive. nil
-    # means archiving was not asked for; a failed archive raises instead.
+    # means archiving was not asked for, or the write failed: then `archive_failure` is the
+    # ArchiveFailed, and the answer is still whole, only unfiled.
     def archived? = !@stored.nil?
 
     # The vendor's label for the mode it served this in ("test" or "production"), or nil. Not
@@ -63,7 +66,7 @@ module EdiGem
     end
 
     def state
-      @state ||= State.new(benefits: @benefits, rejections: @rejections, handle: @handle, settled: @settled).name
+      @state ||= read_state.name
     end
 
     # The policyholder the answer names, or nil. `people` are an eligibility answer's; a
@@ -76,39 +79,69 @@ module EdiGem
       @people.select(&:dependent?)
     end
 
-    # Who of the people on the answer is the one asked about. `asked` is a hash of first_name,
-    # last_name and date_of_birth; `as_dependent` whether they were sent as a dependent.
-    #
-    # An answer can name the subscriber and their dependents together, and a payer may move the
-    # patient between the two (X12 RFI 975), or ignore a dependent and answer about the
-    # subscriber. So the part asked about is compared first, then the other; the first person who
-    # matches is the one. When nobody matches, the part asked about is the one reported: a
-    # dependent asked about and no dependent back means the payer answered about the subscriber.
-    def identify(asked, as_dependent: false, **options)
-      found = compared(asked.to_h, as_dependent, options)
-      Identification.new(**found.to_h, refusal: PersonRefusal.among(@rejections), member_id_asked: true)
-    end
+    # The refusal that decided the state (State#deciding_rejection), not the first one listed: a
+    # payer can list a refusal that decides nothing ahead of the one that does. nil with none.
+    def deciding_rejection = read_state.deciding_rejection
 
-    # The code of the first refusal, to record beside an answer that isn't one; nil when none. A
+    # The deciding refusal's reason, to record beside an answer that isn't one; nil when none. A
     # code the codec did not name is its raw string.
-    def error_code = @rejections.first&.code&.to_s
+    def error_code = deciding_rejection&.code&.to_s
+
+    # The deciding refusal in codes alone (Rejection#summary), to record beside error_code; nil when
+    # none.
+    def error_summary = deciding_rejection&.summary
+
+    # The payer couldn't be reached (Rejection#payer_unreached?): it can't answer right now (an AAA
+    # 42 Stedi says to ask again, or an 80), or Stedi had a problem connecting to it (79). Not a 42
+    # whose follow-up is C, N or S (#resubmission_refused?). Read among #payer_rejections, so a 79,
+    # 42 or 80 in the provider's lane, or a 42 or 80 in the person's, counts as it does in the
+    # payer's.
+    def payer_unavailable? = payer_rejections.any?(&:payer_unreached?)
+
+    # The payer refused the request as sent: a 42 whose follow-up is C, N or S, which Stedi says is
+    # a problem with the request, for Stedi support (Rejection#resubmission_refused?).
+    def resubmission_refused? = payer_rejections.any?(&:resubmission_refused?)
+
+    # The payer refused our setup, not the person: a 41 (our NPI, tax ID or portal credentials) or a
+    # T4 (the payer name or ID we sent) in the payer lane, or a T4 in the provider's, as Stedi reads
+    # them (Rejection#our_setup_refused?). The state stays payer_silent; the caller files it as ours.
+    def our_setup_refused? = payer_rejections.any?(&:our_setup_refused?)
+
+    # Whether Stedi says to ask the payer again at once: any of its refusals is Rejection#retryable?,
+    # so a 42 beside a 79 is asked again and a 79 alone is not.
+    def ask_again? = payer_rejections.any?(&:retryable?)
 
     def rejections_at(level)
       @rejections.select { |rejection| rejection.level == level }
+    end
+
+    # The refusals that are the payer's to read (Rejection#about_payer?): its lane, and in another
+    # lane a reason Stedi reads as the payer's there.
+    def payer_rejections
+      @rejections.select(&:about_payer?)
     end
 
     def provider_refusals
       @rejections.select(&:about_provider?)
     end
 
-    # What the answer says of our provider's standing with the payer: :refused when any refusal is
-    # about our provider, :accepted when the payer answered for it (PROVIDER_ACCEPTED), and nil when
-    # it did neither (it was silent, could not match the person, has not answered yet, or refused the
-    # request for another reason).
+    # What the answer says of our provider's standing with the payer: :needs_provider_details when every
+    # refusal about our provider asks for our tax ID and address (Rejection#provider_details_wanted?),
+    # :refused when any other refusal is about our provider, :not_connected when Stedi couldn't connect to
+    # the payer and says not to ask again on its own (#not_connected?), :accepted when the payer answered
+    # for it (PROVIDER_ACCEPTED), a person it could not match included, and nil when it did neither (it was silent,
+    # has not answered yet, or refused the request for another reason).
     def provider_standing
-      return :refused if provider_refusals.any?
+      return provider_refused_standing if provider_refusals.any?
+      return :not_connected if not_connected?
 
       :accepted if PROVIDER_ACCEPTED.include?(state)
+    end
+
+    # Stedi had a problem connecting to the payer (AAA 79) and nothing beside it says to ask again: Stedi,
+    # "Don't automatically retry… contact Stedi support". A 79 beside a 42 or 80 is asked again (#ask_again?).
+    def not_connected?
+      !ask_again? && payer_rejections.any? { |rejection| rejection.code == Rejection::CONNECTION_PROBLEM }
     end
 
     def active_benefits
@@ -119,27 +152,22 @@ module EdiGem
     def coverage_on(date) = Coverage.on(@benefits, date)
 
     # A discovery's medical plans (MedicalPlan.all): dental and vision left out, and a Medicaid
-    # plan an MCO names paired with the MCO's. `asked` is who the discovery asked about, for each
-    # plan's identification. `directory` is the source's payer directory, which each plan asks for
-    # its payer_id; nil on an answer no source read.
-    def medical_plans(asked: nil) = MedicalPlan.all(@found_plans, directory: @directory, asked: asked)
+    # plan an MCO names paired with the MCO's. `directory` is the source's payer directory, which
+    # each plan asks for its payer_id; nil on an answer no source read.
+    def medical_plans = MedicalPlan.all(@found_plans, directory: @directory)
 
-    # A check's answer as the plan it is about (CheckedPlan), for the person `identification`
-    # names; its finding is the check's (CheckedPlan#finding).
-    def checked_plan(identification: nobody_compared) = CheckedPlan.new(self, identification: identification)
+    # A check's answer as the plan it is about (CheckedPlan). `identification` is who the caller
+    # reads the answer to be about: anything answering answered_as and match.
+    def checked_plan(identification:) = CheckedPlan.new(self, identification: identification)
 
     private
 
-    # Who the answer is about when nobody was asked: only the payer's refusal can say anything.
-    def nobody_compared = identify({})
+    def provider_refused_standing
+      provider_refusals.all?(&:provider_details_wanted?) ? :needs_provider_details : :refused
+    end
 
-    # The first person who matches, in the order `identify` describes.
-    # Whether the person was asked about as a dependent is the caller's fact; it orders the comparison.
-    # :reek:ControlParameter
-    def compared(asked, as_dependent, options)
-      order = [subscriber_person, *dependent_people].compact
-      found = (as_dependent ? order.rotate : order).map { |person| Identification.of(person, asked, **options) }
-      found.find { |one| one.result.matched? } || found.first || Identification.of(nil, asked)
+    def read_state
+      @read_state ||= State.new(benefits: @benefits, rejections: @rejections, handle: @handle, settled: @settled)
     end
 
     def concealed_inspect

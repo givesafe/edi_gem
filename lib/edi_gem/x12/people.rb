@@ -37,11 +37,12 @@ module EdiGem
            segment("EQ", @inquiry.service_type_codes.join(":"))]
         end
 
-        # X12 writes the last name first (NM103). Names go as Identity.plain spells them.
+        # X12 writes the last name first (NM103) and a suffix apart (NM107). Names go as
+        # Identity spells them for a payer, without titles.
         def named(person, entity)
-          segment("NM1", entity, PERSON, Identity.plain(person.last_name).to_s,
-                  Identity.plain(person.first_name).to_s, Identity.plain(person.middle_name).to_s,
-                  "", "", *member_id(person))
+          last_name, suffix = Identity.payer_sent_last_name(person.last_name)
+          segment("NM1", entity, PERSON, last_name.to_s, Identity.payer_sent(person.first_name).to_s,
+                  Identity.payer_sent(person.middle_name).to_s, "", suffix.to_s, *member_id(person))
         end
 
         # DMG is omitted rather than sent without a birth date.

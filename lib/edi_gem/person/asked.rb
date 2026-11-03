@@ -3,44 +3,51 @@
 module EdiGem
   class Person
     # Who a check or discovery asks about, as the caller holds them: a first name, last name and
-    # date of birth (a Date), the core every comparison reads. Not a Person, which is someone as
-    # the payer holds them. Prints none of its values, so it is safe in a log line or an error.
-    #
-    # A discovery may also have been given an address (an Address) and an SSN, details beside the
-    # core: they are compared apart (#given_fields) and never change how the core compares. Of
-    # the SSN only the last four are kept (LastFour), and nothing reads them back.
-    #
-    # Reek reads five instance variables as a class with too much to do. These are the five fields
-    # of one frozen value, the core's three and the two details given beside it, and equality
-    # reads them together, so the count measures the value, not its responsibilities.
-    # :reek:TooManyInstanceVariables
+    # date of birth (a Date). Not a Person, which is someone as the payer holds them. Prints none
+    # of its values, so it is safe in a log line or an error.
     class Asked
       include Concealed
 
       FIELDS = %i[first_name last_name date_of_birth].freeze
 
-      attr_reader(*FIELDS, :address)
+      attr_reader(*FIELDS)
 
-      def initialize(first_name:, last_name:, date_of_birth:, address: nil, ssn: nil)
+      def initialize(first_name:, last_name:, date_of_birth:)
         @first_name = first_name
         @last_name = last_name
         @date_of_birth = date_of_birth
-        @address = address
-        @ssn_last_four = LastFour.of(ssn)
         freeze
       end
 
-      # The core only: what a comparison of the person reads.
       def to_h = FIELDS.to_h { |field| [field, public_send(field)] }
 
-      # This person with the given fields changed, keeping the details given beside the core.
-      def with(**changes) = self.class.new(**to_h, address: @address, ssn: @ssn_last_four, **changes)
+      # This person with the given fields changed. A field changed to nil is not sent.
+      def with(**changes) = self.class.new(**to_h, **changes)
 
-      # The core and the given details alike. One asked with neither equals one asked before
-      # either could be given.
-      def ==(other)
-        other.instance_of?(self.class) && other.to_h == to_h && other.given == given
+      # Whether either name holds an accented letter written another way too (Identity.another_spelling).
+      def another_spelling?
+        names.any? { |name| Identity.another_spelling(name) != Identity.payer_normalized(name) }
       end
+
+      # This person with both names spelled the other way (Identity.another_spelling): Müller as MUELLER.
+      def another_spelling
+        first_name, last_name = names.map { |name| Identity.another_spelling(name) }
+        with(first_name: first_name, last_name: last_name)
+      end
+
+      # Whether either name holds an apostrophe or hyphen, which a payer may hold without.
+      def punctuated?
+        names.any? { |name| Identity.unpunctuated(name) != Identity.payer_normalized(name) }
+      end
+
+      # This person with both names as a payer holding them without punctuation would
+      # (Identity.unpunctuated): O'Brien-Smith as OBRIEN SMITH.
+      def unpunctuated
+        first_name, last_name = names.map { |name| Identity.unpunctuated(name) }
+        with(first_name: first_name, last_name: last_name)
+      end
+
+      def ==(other) = other.instance_of?(self.class) && other.to_h == to_h
       alias eql? ==
 
       def hash = [self.class, to_h].hash
@@ -57,20 +64,11 @@ module EdiGem
                        date_of_birth: Codec.yyyymmdd(@date_of_birth), relationship: relationship)
       end
 
-      # How each detail given beside the core compares with `person`, the one the payer holds
-      # (nil when the answer named nobody): `address` and `ssn_last_four`, each :matched,
-      # :differs, :not_compared (ours can't be compared) or :not_returned (the payer's can't), as
-      # Address#compare and LastFour#compare say, and only those this person carries.
-      def given_fields(person)
-        { address: @address&.compare(person&.address),
-          ssn_last_four: @ssn_last_four&.compare(person&.ssn_last_four) }.compact
-      end
-
       def to_s = inspect
 
-      protected
+      private
 
-      def given = [@address&.to_h, @ssn_last_four]
+      def names = [@first_name, @last_name]
     end
   end
 end

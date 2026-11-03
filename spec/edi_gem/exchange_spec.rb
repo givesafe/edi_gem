@@ -8,6 +8,18 @@ RSpec.describe EdiGem::Exchange do
                         status: 200, response_body: covered_271)
   end
 
+  describe "#failing_status?" do
+    def with_status(status) = described_class.new(method: :post, url: "https://example.test", status: status)
+
+    it "is an HTTP status that is no success" do
+      expect([400, 503, 302].map { |status| with_status(status).failing_status? }).to eq([true, true, true])
+    end
+
+    it "is not a success, nor no status at all" do
+      expect([200, 204, nil].map { |status| with_status(status).failing_status? }).to eq([false, false, false])
+    end
+  end
+
   it "keeps the response body byte for byte, whatever dialect it is in" do
     expect(exchange.response_body).to eq(covered_271)
   end

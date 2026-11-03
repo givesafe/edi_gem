@@ -59,6 +59,18 @@ RSpec.describe EdiGem::Source::Mock do
       expect(EdiGem::Source.for(:mock, api_key: "test_key", archive: nil)).to be_a(described_class)
     end
 
+    it "asks a check once, so a dev or spec run never sleeps, WHEN Stedi's payer is down" do
+      down = CannedSource::Transport.new([canned("stedi_271_payer_down").tap do |answer|
+        answer.body = answer.body.gsub("Resubmission Not Allowed", "Please Resubmit Original Transaction")
+      end, canned("stedi_271_active_coverage")])
+      mock = described_class.new(api_key: "test_key", transport: down, archive: nil)
+      inquiry = EdiGem::Inquiry::Eligibility.new(payer_code: "11111", provider: provider,
+                                                 subscriber: subscriber("Active", member_id: "MOCKID0001"))
+
+      expect([mock.eligibility(inquiry).payer_unavailable?, down.paths.size]).to eq([true, 1])
+      expect(Kernel).to_not have_received(:sleep)
+    end
+
     it "is Stedi, for everything it does not answer itself" do
       expect(described_class.new(api_key: "test_key", archive: nil)).to be_a(EdiGem::Source::Stedi)
     end
@@ -128,7 +140,7 @@ RSpec.describe EdiGem::Source::Mock do
 
     it "finds plans for someone with another first name and birth date" do
       people = discovery("OtherPerson").found_plans.map do |plan|
-        plan.person.identity.values_at(:first_name, :date_of_birth)
+        [plan.person.first_name, plan.person.date_of_birth]
       end
 
       expect(people.uniq).to eq([["ALEX", EdiGem::Source::Mock::Plans::MISMATCHED_BIRTH_DATE]])
@@ -154,20 +166,19 @@ RSpec.describe EdiGem::Source::Mock do
       expect([response.state, response.provider_refusals]).to eq([:payer_silent, []])
     end
 
+    it "is a payer that is down, worth asking again, for the NoAnswer last name" do
+      response = discovery("NoAnswer")
+
+      expect([response.payer_unavailable?, response.ask_again?, response.resubmission_refused?])
+        .to eq([true, true, false])
+    end
+
     it "does not identify the person for the NotFound last name" do
       expect(discovery("NotFound").state).to eq(:not_identified)
     end
 
     it "archives the request and the answer, as for Stedi" do
       expect(discovery("Active").stored.request_uri).to start_with("file://")
-    end
-
-    it "recovers the question from the archived request, as Stedi does" do
-      question = source.archived_question(discovery("Active").stored.request_uri)
-
-      expect([question.person.to_h, question.as_of])
-        .to eq([{ first_name: "PAT", last_name: "ACTIVE", date_of_birth: Date.new(1980, 1, 1) },
-                Date.new(2026, 10, 20)])
     end
 
     it "files them under Stedi" do
@@ -248,6 +259,26 @@ RSpec.describe EdiGem::Source::Mock do
       end
     end
 
+    it "reads Aaa79 in the provider lane as a payer it couldn't reach, not connected, not a refusal of our provider" do
+      response = discovery("Aaa79")
+
+      expect([response.payer_unavailable?, response.ask_again?, response.provider_standing])
+        .to eq([true, false, :not_connected])
+    end
+
+    it "reads Aaa42 in the subscriber lane as a payer that can't answer right now, to ask again" do
+      response = discovery("Aaa42")
+
+      expect([response.rejections.first.location, response.payer_unavailable?, response.ask_again?])
+        .to eq(["Loop 2100C", true, true])
+    end
+
+    it "reads AaaT4 in the provider lane as our setup refused, not a refusal of our provider" do
+      response = discovery("AaaT4")
+
+      expect([response.our_setup_refused?, response.provider_standing]).to eq([true, nil])
+    end
+
     it "finds nothing for an AAA code Stedi does not publish" do
       expect(discovery("Aaa99").rejections).to be_empty
     end
@@ -257,14 +288,17 @@ RSpec.describe EdiGem::Source::Mock do
     it "uppercases, drops accents and cuts a long first name short, keeping the birth date" do
       person = discovery("Spélled", first_name: "Maximiliano").found_plans.first.person
 
-      expect(person.identity.values).to eq(%w[MAXIMILI SPELLED 19800101])
+      expect([person.first_name, person.last_name, person.date_of_birth]).to eq(%w[MAXIMILI SPELLED 19800101])
+    end
+  end
+
+  describe "a suffix" do
+    it "comes back apart, as sent, and is read as part of the last name" do
+      expect(discovery("Active Jr").found_plans.map { |plan| plan.person.last_name }.uniq).to eq(["ACTIVE JR"])
     end
 
-    it "is still the person asked about" do
-      plan = discovery("Spélled", first_name: "Maximiliano").found_plans.first
-
-      expect(plan.identify({ first_name: "Maximiliano", last_name: "Spélled", date_of_birth: "19800101" }).result)
-        .to be_matched
+    it "comes back on the patient as a dependent" do
+      expect(discovery("Dependent III").found_plans.first.person.last_name).to eq("DEPENDENT III")
     end
   end
 
@@ -313,6 +347,10 @@ RSpec.describe EdiGem::Source::Mock do
 
     it "finds the plans for the person it was about" do
       expect(resolved("Pending").found_plans.map { |plan| plan.person.last_name }.uniq).to eq(["PENDING"])
+    end
+
+    it "keeps the suffix the request sent apart, as part of the last name" do
+      expect(resolved("Pending Jr").found_plans.map { |plan| plan.person.last_name }.uniq).to eq(["PENDING JR"])
     end
 
     it "finds the person through `people` when given it" do

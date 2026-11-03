@@ -53,6 +53,13 @@ RSpec.describe EdiGem::X12::Transaction270 do
       expect(written.segments).to include("NM1*1P*1*BYRON*ADA****XX*1999999984~")
     end
 
+    it "refuses a provider with no name, which NM103 must carry" do
+      nameless = EdiGem::Provider.new(npi: "1999999984")
+      written = described_class.new(inquiry_for(nameless), payer_code: "38333", trace: "1")
+
+      expect { written.segments }.to raise_error(ArgumentError, /needs a provider name/)
+    end
+
     # NM1 holds one identifier, so a tax id alongside the NPI goes in a REF.
     it "carries a tax id in a REF when the provider has one" do
       billing = EdiGem::Provider.new(npi: "1999999984", organization_name: "EXAMPLECLINIC",
@@ -70,6 +77,12 @@ RSpec.describe EdiGem::X12::Transaction270 do
   describe "2100C, the member being asked about" do
     it "writes the name in X12's order, which is last then first" do
       expect(transaction.segments).to include("NM1*IL*1*LOVELACE*ADA****MI*MEM123~")
+    end
+
+    it "writes a suffix in NM107, apart from the last name, and no title" do
+      suffixed = EdiGem::Subscriber.new(member_id: "MEM123", first_name: "Mrs Ada", last_name: "Lovelace III")
+
+      expect(written_for(suffixed).segments).to include("NM1*IL*1*LOVELACE*ADA***III*MI*MEM123~")
     end
 
     it "carries the birth date and gender the payer matches on" do

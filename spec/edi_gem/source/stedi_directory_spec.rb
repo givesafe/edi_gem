@@ -97,4 +97,26 @@ RSpec.describe "Stedi's payer directory" do
       expect([source.payer_id_for(" "), source.payer_id_for(nil), transport.paths]).to eq([nil, nil, []])
     end
   end
+
+  describe "#listed_payer_for" do
+    it "returns the whole payer that answers to an alias, its clearinghouse ID included" do
+      source, = directory(listed("99999", aliases: ["ALIAS1"]))
+
+      expect(source.listed_payer_for("ALIAS1").clearinghouse_id).to eq "stedi-99999"
+    end
+
+    it "returns nil WHEN two payers answer to the code by alias" do
+      source, = directory(listed("11111", aliases: ["SHARED"]), listed("22222", aliases: ["SHARED"]))
+
+      expect(source.listed_payer_for("SHARED")).to be_nil
+    end
+
+    it "shares one search with #payer_id_for for the same code" do
+      source, transport = directory(listed("99999"))
+      source.listed_payer_for("99999")
+      source.payer_id_for("99999")
+
+      expect(transport.paths.size).to eq 1
+    end
+  end
 end

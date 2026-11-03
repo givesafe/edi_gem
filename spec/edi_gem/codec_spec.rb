@@ -38,6 +38,21 @@ RSpec.describe EdiGem::Codec do
       expect(described_class.decode(:aaa03, "99")).to eq("99")
     end
 
+    it "keeps a birth date after the day asked (60) apart from the day outside the payer's window (62, 63)" do
+      expect(%w[60 62 63].map { |code| described_class.decode(:aaa03, code) })
+        .to eq(%i[birth_date_after_day_asked date_out_of_range date_out_of_range])
+    end
+
+    it "reads 64 as a dependent identifier the payer needs, not an ID it can't find (72)" do
+      expect(%w[64 72].map { |code| described_class.decode(:aaa03, code) })
+        .to eq(%i[dependent_id_required member_id_invalid])
+    end
+
+    it "reads 58 as a birth date missing or malformed, not one the payer holds differently (71)" do
+      expect(%w[58 71].map { |code| described_class.decode(:aaa03, code) })
+        .to eq(%i[invalid_date_of_birth date_of_birth_mismatch])
+    end
+
     it "reads where a range of dates starts" do
       expect(described_class.decode(:rd8_start, "20260820-20260930")).to eq("20260820")
     end

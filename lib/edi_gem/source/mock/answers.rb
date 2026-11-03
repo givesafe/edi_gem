@@ -56,20 +56,22 @@ module EdiGem
 
         private
 
-        # Reads the person from the request body into the Subscriber it remembers. The envied
-        # object is that body's subscriber, a Hash parsed from JSON, which can't take the method.
+        # Reads the person from the request body into the Subscriber it remembers, a
+        # suffix sent apart back in the last name. The envied object is that body's subscriber, a
+        # Hash parsed from JSON, which can't take the method.
         # :reek:FeatureEnvy
         def pending(name, subscriber)
           discovery_id = "mock-#{name}-#{SecureRandom.uuid}"
+          last_name = subscriber.values_at("lastName", "suffix").compact.join(" ")
           @remembered[discovery_id] = Subscriber.new(first_name: subscriber["firstName"],
-                                                     last_name: subscriber["lastName"],
+                                                     last_name: last_name,
                                                      date_of_birth: subscriber["dateOfBirth"])
           Answer.new(status: PENDING, discovery_id: discovery_id)
         end
 
         # A pending discovery, found active for the person it was about.
         # Subscriber#to_h is the request's shape, not the one Plans reads: symbol keys, names as
-        # Identity.plain spells them, blanks dropped. Using it would change what a collected answer
+        # Identity.payer_normalized spells them, blanks dropped. Using it would change what a collected answer
         # echoes for a person `people` returns, which is a question for the mock's owner.
         # :reek:FeatureEnvy
         def collected(discovery_id)

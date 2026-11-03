@@ -55,6 +55,11 @@ RSpec.describe EdiGem::Coverage do
     end
   end
 
+  # Stedi reads an MC line, like an R line, as naming the managed care plan, not as coverage.
+  it "decides nothing WHEN the only line on 30 names a managed care coordinator" do
+    expect(finding([{ "code" => "MC", "serviceTypeCodes" => ["30"] }])).to eq(status: nil, code: nil)
+  end
+
   describe "the line that decides" do
     it "reads an inactive line on 30 as inactive, with its code" do
       expect(finding([{ "code" => "7", "serviceTypeCodes" => ["30"] }])).to eq(status: :inactive, code: "7")

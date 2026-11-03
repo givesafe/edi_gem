@@ -41,18 +41,24 @@ module EdiGem
     end
 
     # AAA03 reject reasons. A code not named here passes through as its raw string.
+    # 60 is the birth date falling after the day asked, a fact about the birth date; 62 and 63 are
+    # the day asked outside the payer's window, a fact about the day. They read apart so the field
+    # that was wrong is never lost. 64 is the payer needing another identifier for a dependent,
+    # which Stedi says is ours to send (dependents[].additionalIdentification), not an ID the payer
+    # can't find. 58 is the birth date missing or not written YYYYMMDD, which Stedi says is ours to
+    # send (subscriber.dateOfBirth), not a birth date the payer holds differently (71).
     REJECT_REASON = {
       "42" => :payer_unavailable, "43" => :provider_not_on_file, "45" => :provider_not_eligible,
       "50" => :provider_not_authorized, "51" => :provider_not_eligible,
-      "58" => :date_of_birth_mismatch, "62" => :date_out_of_range,
-      "64" => :member_id_invalid, "65" => :name_mismatch,
+      "58" => :invalid_date_of_birth, "62" => :date_out_of_range,
+      "64" => :dependent_id_required, "65" => :name_mismatch,
       "67" => :subscriber_not_found, "68" => :duplicate_subscriber,
       "71" => :date_of_birth_mismatch, "72" => :member_id_invalid,
       "73" => :name_mismatch, "75" => :subscriber_not_found,
       "76" => :duplicate_subscriber, "78" => :subscriber_not_in_plan,
       "15" => :required_data_missing, "33" => :input_errors,
       "41" => :authorization_restricted,
-      "57" => :invalid_date_of_service, "60" => :date_out_of_range,
+      "57" => :invalid_date_of_service, "60" => :birth_date_after_day_asked,
       "63" => :date_out_of_range, "77" => :patient_not_found,
       "79" => :invalid_participant, "80" => :payer_unavailable,
       "97" => :provider_address_invalid,
@@ -67,6 +73,9 @@ module EdiGem
     # Published AAA03 values with no documented meaning, deliberately left unnamed rather than
     # guessed. A spec pins REJECT_REASON and this list against the vendor's published enum.
     UNNAMED_REASONS = %w[48 54 55 66 69 70 98 AA AE AF AG AO CI E8 IA MA].freeze
+
+    # Every published AAA03 value, named or not.
+    AAA03_VALUES = (REJECT_REASON.keys + UNNAMED_REASONS).freeze
 
     YES_NO = { "Y" => true, "N" => false, "U" => nil, "W" => nil }.freeze
 

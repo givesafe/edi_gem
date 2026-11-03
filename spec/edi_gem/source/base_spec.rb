@@ -50,11 +50,8 @@ RSpec.describe EdiGem::Source::Base do
   end
 
   it "refuses to read an archived discovery" do
-    expect { port.archived("file:///kept.json") }.to raise_error(EdiGem::FeatureNotSupported, /discovery/)
-  end
-
-  it "refuses to read an archived discovery request" do
-    expect { port.archived_question("file:///kept.json") }.to raise_error(EdiGem::FeatureNotSupported, /discovery/)
+    expect { port.archived("file:///kept.json", kind: :discovery) }
+      .to raise_error(EdiGem::FeatureNotSupported, /discovery/)
   end
 
   it "refuses a batch" do
@@ -81,6 +78,10 @@ RSpec.describe EdiGem::Source::Base do
 
   it "refuses to find a payer ID" do
     expect { port.payer_id_for("99999") }.to raise_error(EdiGem::FeatureNotSupported, /payer_directory/)
+  end
+
+  it "refuses to find a listed payer" do
+    expect { port.listed_payer_for("99999") }.to raise_error(EdiGem::FeatureNotSupported, /payer_directory/)
   end
 
   it "is a gem error, so a caller rescuing EdiGem::Error catches it" do

@@ -17,7 +17,7 @@ RSpec.describe "A discovered plan's payer ID" do
   # The first search fails as a transport would fail it, the second is answered.
   let(:failing_once) do
     Class.new(CannedSource::Transport) do
-      def perform(path:)
+      def perform(path:, **)
         return super unless @paths.empty?
 
         @paths << path
@@ -97,7 +97,7 @@ RSpec.describe "A discovered plan's payer ID" do
       source, transport = stedi_answering(canned("stedi_discovery_complete"), archive: archive)
       kept = source.discovery(inquiry, archive: { name: "discovery-1" })
 
-      plans = source.archived(kept.stored.response_uri).medical_plans
+      plans = source.archived(kept.stored.response_uri, kind: :discovery).medical_plans
 
       expect([plans.map { |plan| plan.person.address.postal_code }, transport.paths.size]).to eq([["00000"], 1])
     end

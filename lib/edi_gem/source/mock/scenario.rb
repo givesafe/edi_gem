@@ -54,8 +54,9 @@ module EdiGem
                        found_with_error: ["42", "Loop 2100A"], not_found: ["75", "Loop 2100C"],
                        partial: ["15", "Loop 2100C"] }.freeze
 
-        # Codes whose follow-up is not "Please Correct and Resubmit".
-        FOLLOWUPS = { "42" => "Resubmission Not Allowed", "80" => "Resubmission Not Allowed",
+        # Codes whose follow-up is not "Please Correct and Resubmit". A 42 or an 80 is a payer that
+        # is down, so its follow-up is one Stedi says to ask again after.
+        FOLLOWUPS = { "42" => "Please Resubmit Original Transaction", "80" => "Please Resubmit Original Transaction",
                       "04" => "Resubmission Not Allowed" }.freeze
 
         # The warning Stedi adds to a confident answer.

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 RSpec.describe EdiGem::FoundPlan do
-  let(:asked) { { first_name: "Testfirst", last_name: "Testlast", date_of_birth: "20100101" } }
   let(:holder) do
     EdiGem::Person.new(role: :subscriber, first_name: "POLICY", last_name: "HOLDER", date_of_birth: "19700101",
                        relationship_code: "18")
@@ -34,14 +33,6 @@ RSpec.describe EdiGem::FoundPlan do
     expect(plan([holder]).person).to eq(holder)
   end
 
-  it "compares the person matched with who was asked about" do
-    expect(plan([holder, patient]).identify(asked).result).to be_matched
-  end
-
-  it "compares nobody as nothing returned" do
-    expect(plan([]).identify(asked).then { |found| [found.person, found.result.matched?] }).to eq([nil, false])
-  end
-
   it "reads the plan's coverage by the two-part test" do
     expect(plan([holder]).coverage_on("20260901")).to be_active
   end
@@ -70,6 +61,21 @@ RSpec.describe EdiGem::FoundPlan do
 
     it "is true WHEN the plan names the other plan's payer as its primary payer" do
       expect(found(primary_payer_code: "MCAID9").names_as_primary_payer?(found(payer_code: "MCAID9"))).to be(true)
+    end
+
+    # Stedi's Medicaid guide pairs by the related entity's name, since its coding varies by state.
+    it "is true WHEN the plan names the other plan's payer by name, case and spacing aside" do
+      medicaid = found(payer_code: "77027", payer_name: "MEDICAID  FLORIDA")
+
+      expect(found(primary_payer_code: "OTHER", primary_payer_name: "Medicaid Florida")
+               .names_as_primary_payer?(medicaid)).to be(true)
+    end
+
+    it "is false WHEN it names another payer by name, or a blank name" do
+      medicaid = found(payer_code: "77027", payer_name: "MEDICAID FLORIDA")
+
+      expect([found(primary_payer_name: "MEDICAID GEORGIA"), found(primary_payer_name: " ")]
+               .map { |plan| plan.names_as_primary_payer?(medicaid) }).to eq([false, false])
     end
 
     it "is false WHEN it names another payer, or none" do

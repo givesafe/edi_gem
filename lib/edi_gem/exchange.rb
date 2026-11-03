@@ -33,6 +33,13 @@ module EdiGem
           started_at: started_at, duration: ended_at - started_at)
     end
 
+    # The HTTP statuses that are a success.
+    SUCCESS = (200..299)
+
+    # Whether the call came back with an HTTP status that is no success. An exchange recorded with
+    # no status (none was sent) has none to fail.
+    def failing_status? = !@status.nil? && !SUCCESS.cover?(@status)
+
     def to_h
       { method: @method, url: @url,
         request_headers: @request_headers, request_body: @request_body,

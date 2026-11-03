@@ -28,12 +28,15 @@ module EdiGem
         # `archive:` (`{ name: "stem" }`, as for a real-time check) files each item's raw answer as
         # its own object under `<stem>_<identifier>`; the Archive::Stored comes back on the item as
         # `check.stored`. An item with no identifier cannot be filed, and raises.
-        def batch_checks(batch_id, page_token: nil, page_size: nil, archive: nil)
+        #
+        # `only:` (identifiers) keeps the items sent under those alone, so a caller that has taken
+        # some answers already reads, and files, only the rest. nil keeps every item.
+        def batch_checks(batch_id, page_token: nil, page_size: nil, archive: nil, only: nil)
           responses.ensure_archivable(archive)
           query = { pageToken: page_token, pageSize: page_size }.compact
           path = "#{@policy.path_for(:batch_checks)}/#{batch_id}/items"
           exchange = get(:batch_checks, query.empty? ? path : "#{path}?#{URI.encode_www_form(query)}")
-          body = parse(exchange)
+          body = kept_items(parse(exchange), only) { |item| Batch::Check.new(item).identifier }
           stored = responses.keep_items(exchange, body, feature: BATCH_CHECK, archive: archive)
           Batch::Checks.from(body, exchange: exchange, stored: stored)
         end
@@ -42,17 +45,29 @@ module EdiGem
         # real-time check is. batch_checks says whether a check is done; this is what it said. A check
         # still being retried is on no page yet, and one that failed validation never is.
         #
-        # `archive:` files each item's answer under `<stem>_<identifier>`, as batch_checks does.
-        def batch_results(batch_id, page_token: nil, page_size: nil, archive: nil)
+        # `archive:` files each item's answer under `<stem>_<identifier>`, and `only:` keeps the
+        # items sent under those identifiers alone, as batch_checks does.
+        def batch_results(batch_id, page_token: nil, page_size: nil, archive: nil, only: nil)
           responses.ensure_archivable(archive)
           query = { batchId: batch_id, pageToken: page_token, pageSize: page_size }.compact
           exchange = get(:batch_results, "#{@policy.path_for(:batch_results)}?#{URI.encode_www_form(query)}")
-          body = parse(exchange)
+          body = kept_items(parse(exchange), only) { |item| item[Responses::IDENTIFIER] }
           items = responses.results(exchange, body, schema: NAME, feature: BATCH_RESULT, archive: archive)
           Batch::Answers.new(items: items, next_page_token: body["nextPageToken"], exchange: exchange)
         end
 
         private
+
+        # The page with only the items whose identifier (the block's) is one of `only`; the page
+        # token is kept, so the listing still pages on. The page is the parsed body, a Hash: choosing
+        # its items is this call's, not the Hash's.
+        # :reek:FeatureEnvy
+        def kept_items(body, only)
+          return body unless only
+
+          wanted = only.map(&:to_s)
+          body.merge("items" => Array(body["items"]).select { |item| wanted.include?(yield(item)) })
+        end
 
         def batch_item(identifier, inquiry)
           ensure_searchable(inquiry)

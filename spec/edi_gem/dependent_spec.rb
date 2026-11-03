@@ -11,7 +11,6 @@ RSpec.describe "asking about a dependent" do
     EdiGem::Subscriber.new(first_name: "Testfirst", last_name: "Testlast",
                            date_of_birth: "20100101", relationship: :child)
   end
-  let(:asked) { { first_name: "Testfirst", last_name: "Testlast", date_of_birth: "20100101" } }
 
   def inquiry(dependent: patient)
     EdiGem::Inquiry::Eligibility.new(payer_code: "77027", subscriber: policy,
@@ -63,6 +62,13 @@ RSpec.describe "asking about a dependent" do
                                          individualRelationshipCode: "19" }])
     end
 
+    it "sends the dependent's suffix in its own field" do
+      junior = EdiGem::Subscriber.new(first_name: "Testfirst", last_name: "Testlast Jr", relationship: :child)
+      sent = EdiGem::Source::Stedi.new(api_key: "test_key").eligibility_body(inquiry(dependent: junior))
+
+      expect(sent[:dependents].first).to include(lastName: "TESTLAST", suffix: "JR")
+    end
+
     it "leaves the relationship out when it is not known" do
       unknown = EdiGem::Subscriber.new(first_name: "Testfirst", relationship: nil)
       sent = EdiGem::Source::Stedi.new(api_key: "test_key").eligibility_body(inquiry(dependent: unknown))
@@ -106,11 +112,10 @@ RSpec.describe "asking about a dependent" do
       expect(response.dependent_people.map(&:relationship_code)).to eq(["19"])
     end
 
-    it "finds the patient in the dependent part" do
-      found = answer.identify(asked, as_dependent: true)
+    it "reads a suffix the payer sends apart as part of the last name" do
+      suffixed = edited { |body| body["dependents"].first["suffix"] = "JR" }
 
-      expect(found.person).to be_dependent
-      expect(found.result).to be_matched
+      expect(answer(suffixed).dependent_people.first.last_name).to eq("TESTLAST JR")
     end
 
     it "reads the payer's correction codes on the dependent" do
@@ -129,22 +134,11 @@ RSpec.describe "asking about a dependent" do
       expect(answer(refused).rejections_at(:dependent).map(&:code)).to eq([:name_mismatch])
     end
 
-    # The payer ignored the dependent: nobody in the dependent part, and the subscriber is
-    # someone else.
-    it "reports the subscriber, not matched, when the payer answered about them instead" do
-      ignored = edited { |body| body.delete("dependents") }
-      found = answer(ignored).identify(asked, as_dependent: true)
+    # The payer ignored the dependent: nobody in the dependent part, only the subscriber.
+    it "reads only the subscriber when the payer answered about them instead" do
+      ignored = answer(edited { |body| body.delete("dependents") })
 
-      expect(found.person).to_not be_dependent
-      expect(found.result).to be_mismatched
-    end
-
-    # Asked as the subscriber, the payer put the patient in the dependent part (X12 RFI 975).
-    it "finds a patient the payer moved to the dependent part" do
-      found = answer.identify(asked, as_dependent: false)
-
-      expect(found.person).to be_dependent
-      expect(found).to have_attributes(match: :matched, answered_as: :dependent)
+      expect([ignored.dependent_people, ignored.subscriber_person.relationship_code]).to eq([[], "18"])
     end
 
     it "reads no person from a subscriber part that holds only a refusal" do
@@ -156,15 +150,13 @@ RSpec.describe "asking about a dependent" do
       expect(answer(refused).people).to eq([])
     end
 
-    it "reports nobody, with nothing compared, when the answer names no one" do
+    it "reads nobody when the answer names no one" do
       nobody = edited do |body|
         body.delete("dependents")
         body.delete("subscriber")
       end
-      found = answer(nobody).identify(asked)
 
-      expect(found.person).to be_nil
-      expect(found.result.outcome).to eq(:not_compared)
+      expect([answer(nobody).people, answer(nobody).subscriber_person]).to eq([[], nil])
     end
   end
 
@@ -185,8 +177,8 @@ RSpec.describe "asking about a dependent" do
       people = reading.people
 
       expect(people.map(&:role)).to eq(%i[subscriber dependent])
-      expect(people.last.identity).to eq(first_name: "TESTFIRST", last_name: "TESTLAST",
-                                         date_of_birth: "20100101")
+      expect([people.last.first_name, people.last.last_name, people.last.date_of_birth])
+        .to eq(%w[TESTFIRST TESTLAST 20100101])
       expect(people.last).to be_identity_corrected
     end
 

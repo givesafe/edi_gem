@@ -18,6 +18,19 @@ RSpec.describe EdiGem::Fault do
     end
   end
 
+  describe ".of_status" do
+    let(:policy) { EdiGem::Policy.for(:stedi) }
+
+    it "is the Fault a status means under the source's policy, where it was sent" do
+      expect(described_class.of_status(400, policy: policy, path: "/x"))
+        .to have_attributes(kind: :malformed_request, source: :stedi, status: 400, path: "/x")
+    end
+
+    it "is unexpected for a status the policy does not map" do
+      expect(described_class.of_status(302, policy: policy, path: "/x").kind).to eq(:unexpected)
+    end
+  end
+
   describe "retryability, which belongs to the meaning and not to the vendor" do
     it "retries a rate limit" do
       expect(fault(:rate_limited)).to be_retryable
@@ -36,16 +49,6 @@ RSpec.describe EdiGem::Fault do
     end
   end
 
-  describe "#to_rejection" do
-    it "records a timeout in the transport lane, which nothing else fills" do
-      expect(fault(:timeout).to_rejection.level).to eq(:transport)
-    end
-
-    it "carries the kind as the code, so a batch can group failures" do
-      expect(fault(:timeout).to_rejection.code).to eq(:timeout)
-    end
-  end
-
   describe "the message" do
     it "names the source, the kind and the status" do
       message = fault(:rate_limited, source: :stedi, status: 429, path: "/x").message
@@ -56,16 +59,6 @@ RSpec.describe EdiGem::Fault do
     it "cannot carry a response body at all" do
       expect(described_class.instance_method(:initialize).parameters.map(&:last))
         .to_not include(:body)
-    end
-  end
-
-  describe "#to_rejection on a fault nobody should retry" do
-    it "offers no follow-up action, because there is none to offer" do
-      expect(fault(:not_authorized).to_rejection.followup).to be_nil
-    end
-
-    it "records the envelope level, because a refused credential is not the payer's answer" do
-      expect(fault(:not_authorized).to_rejection.level).to eq(:envelope)
     end
   end
 end

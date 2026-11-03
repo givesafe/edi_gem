@@ -12,6 +12,11 @@ RSpec.describe EdiGem::Policy do
       expect(stedi.path_for(:eligibility)).to match(%r{/eligibility/v3\z})
     end
 
+    # Stedi holds a real-time check open for up to 120 s and warns against cancelling sooner.
+    it "waits past Stedi's 120-second hold for a real-time check's answer" do
+      expect(stedi.for_operation(:eligibility).timeout).to be > EdiGem::Source::Stedi::AskingAgain::WINDOW
+    end
+
     it "retries more than once, or the retry layer does nothing" do
       expect(stedi.attempts).to be > 1
     end
@@ -121,6 +126,54 @@ RSpec.describe EdiGem::Policy do
 
     it "does not retry a refused credential" do
       expect(policy.retry?(policy.kind_for_status(401))).to be(false)
+    end
+
+    # Stedi, eligibility troubleshooting: a 429 is a 42, "Retry immediately", for up to 2 minutes.
+    it "retries a real-time check's 429 until the end, not for a count of attempts" do
+      eligibility = policy.for_operation(:eligibility)
+
+      expect([eligibility.retry_until_end?(:rate_limited), eligibility.retry_until_end?(:vendor_unavailable)])
+        .to eq([true, false])
+    end
+
+    # Stedi answers a payer ID it can't connect to with a 400 that holds an AAA 79.
+    it "reads a real-time check's 400 for an answer, and no other failing status" do
+      eligibility = policy.for_operation(:eligibility)
+
+      expect([400, 401, 404, 500].map { |status| eligibility.answer_in_status?(status) })
+        .to eq([true, false, false, false])
+    end
+
+    it "reads no other operation's 400 for an answer" do
+      others = policy.operations - [:eligibility]
+
+      expect(others.map { |operation| policy.for_operation(operation).answer_in_status?(400) }.uniq).to eq([false])
+    end
+
+    it "retries no other operation's 429 until the end" do
+      others = policy.operations - [:eligibility]
+
+      expect(others.map { |operation| policy.for_operation(operation).retry_until_end?(:rate_limited) }.uniq)
+        .to eq([false])
+    end
+
+    it "never retries until the end a kind it does not retry" do
+      over = described_class.new(:test, "retry" => { "retry_on" => [], "retry_until_end" => %w[rate_limited] })
+
+      expect(over.retry_until_end?(:rate_limited)).to be(false)
+    end
+
+    # Stedi doesn't say a second discovery or batch, sent after our own timeout, is safe or unbilled.
+    it "does not send a discovery or a batch again after our own timeout" do
+      sends = %i[discovery batch_eligibility].map { |operation| policy.for_operation(operation) }
+
+      expect(sends.map { |send| send.retry?(:timeout) }).to eq([false, false])
+      expect(sends.map { |send| send.retry?(:vendor_unavailable) }).to eq([true, true])
+    end
+
+    it "still retries a timed-out poll for a discovery's results, and a timed-out check" do
+      expect(%i[discovery_results eligibility].map { |operation| policy.for_operation(operation).retry?(:timeout) })
+        .to eq([true, true])
     end
   end
 

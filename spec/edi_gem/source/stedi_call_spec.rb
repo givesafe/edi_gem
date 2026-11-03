@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "pp"
 require "tmpdir"
 
 # The public calls, end to end against canned responses written from Stedi's documentation.
@@ -123,13 +122,204 @@ RSpec.describe "calling Stedi" do
       expect(response.state).to eq(:payer_silent)
     end
 
-    # AAA 42 arrives saying "Resubmission Not Allowed" and Stedi documents it as retry anyway.
-    it "reports the refusal as worth another attempt" do
-      expect(response.rejections.map(&:retryable?)).to eq([true])
+    # Stedi: a 42 whose follow-up is C, N or S is a problem with the request, not a payer that is down.
+    it "says the payer refused the request as sent, not that it is down" do
+      expect([response.resubmission_refused?, response.payer_unavailable?]).to eq([true, false])
+    end
+
+    # This 42 says "Resubmission Not Allowed" (N): Stedi says not to ask it again, the request has
+    # a problem for Stedi support. Asking again here would have taken a second canned answer.
+    it "is asked once, since its follow-up is one Stedi says not to ask again after" do
+      expect([response.ask_again?, response.exchanges.size]).to eq([false, 1])
     end
 
     it "counts the refusal once, though the vendor lists it twice" do
       expect(response.rejections.size).to eq(1)
+    end
+  end
+
+  # Stedi answers a payer ID it can't connect to with a 400 that holds an AAA 79, "There is a
+  # problem connecting with this payer": the same finding a 79 in a 200 is.
+  describe "#eligibility, when Stedi can't connect to the payer and answers with a 400" do
+    subject(:response) do
+      source, = stedi_answering(canned("stedi_271_payer_aaa", status: 400))
+      source.eligibility(eligibility_inquiry)
+    end
+
+    it "reads the 79 as a 200's is read: the payer unreached, and not asked again" do
+      expect([response.state, response.payer_unavailable?, response.ask_again?]).to eq([:payer_silent, true, false])
+    end
+
+    it "keeps the status the answer came with" do
+      expect(response.exchanges.map(&:status)).to eq([400])
+    end
+  end
+
+  describe "#eligibility, when Stedi answers with a 400 that holds no AAA" do
+    let(:archive) { RecordingArchive.new }
+
+    def refused(body)
+      source, = stedi_answering(answering(body, status: 400), archive: archive)
+      source.eligibility(eligibility_inquiry, archive: { name: "84213" })
+    end
+
+    it "raises the Fault the status means, as before" do
+      expect { refused(JSON.generate("code" => "BAD_REQUEST")) }
+        .to raise_error(an_object_having_attributes(kind: :malformed_request, status: 400,
+                                                    path: "/2024-04-01/change/medicalnetwork/eligibility/v3"))
+    end
+
+    it "raises it for a body that is not JSON, and files nothing" do
+      expect { refused("<html>gateway</html>") }.to raise_error(EdiGem::Fault)
+      expect(archive.kept).to be_empty
+    end
+  end
+
+  describe "#eligibility, when the archive cannot file the answer" do
+    let(:archive) do
+      Class.new(RecordingArchive) do
+        def keep(*, **) = raise(EdiGem::ArchiveFailed.new("s3://warehouse could not be reached", retryable: true))
+      end.new
+    end
+    let(:response) do
+      source, = stedi_answering(canned("stedi_271_active_coverage"), archive: archive)
+      source.eligibility(eligibility_inquiry, archive: { name: "84213" })
+    end
+
+    it "returns the paid answer whole, unstored" do
+      expect([response.state, response.archived?, response.stored]).to eq([:complete, false, nil])
+    end
+
+    it "carries the failure for the caller to report" do
+      expect(response.archive_failure).to have_attributes(class: EdiGem::ArchiveFailed, retryable?: true)
+    end
+  end
+
+  describe "#eligibility, when the archive files the answer" do
+    it "carries no failure" do
+      source, = stedi_answering(canned("stedi_271_active_coverage"), archive: RecordingArchive.new)
+      response = source.eligibility(eligibility_inquiry, archive: { name: "84213" })
+
+      expect([response.archived?, response.archive_failure]).to eq([true, nil])
+    end
+  end
+
+  # Stedi's troubleshooting guide: ask a payer that can't answer right now again at once, and keep
+  # asking for up to two minutes. A clock the sleeper moves stands in for the time that passes.
+  describe "#eligibility, when the payer can't answer right now" do
+    let(:clock) do
+      Class.new do
+        attr_accessor :seconds
+
+        def initialize = @seconds = 0
+        def clock_gettime(_kind) = @seconds
+      end.new
+    end
+    let(:slept) { [] }
+    let(:sleeper) do
+      waits = slept
+      timer = clock
+      Class.new { define_method(:sleep) { |seconds| (waits << seconds) && (timer.seconds += seconds) } }.new
+    end
+    let(:pauses) { [1, 5, 10] }
+
+    # The fixture's 42 with another AAA03 and follow-up, in both of the lists Stedi sends it in.
+    def down(code: "42", followup: "Please Resubmit Original Transaction")
+      body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_271_payer_down.json")))
+      [body["payer"]["aaaErrors"].first, body["errors"].first].each do |error|
+        error.merge!("code" => code, "followupAction" => followup)
+      end
+      canned_body(body)
+    end
+
+    def asked(*answers)
+      source, transport = stedi_answering(*answers, payer_pauses: pauses, sleeper: sleeper, clock: clock)
+      [source.eligibility(eligibility_inquiry), transport]
+    end
+
+    def keys(response) = response.exchanges.map { |exchange| exchange.request_headers["idempotency-key"] }
+
+    it "asks again after the first pause and returns the payer's answer" do
+      response, = asked(down, canned("stedi_271_active_coverage"))
+
+      expect([response.state, slept]).to eq([:complete, [1]])
+    end
+
+    it "asks again under a key of its own, the first key with -r1" do
+      first, = stedi_answering(canned("stedi_271_active_coverage"))
+      first_key = keys(first.eligibility(eligibility_inquiry)).first
+      response, = asked(down, canned("stedi_271_active_coverage"))
+
+      expect(keys(response)).to eq(["#{first_key}-r1"])
+    end
+
+    it "keeps to the caller's key, with -r1, -r2 for each ask again" do
+      source, = stedi_answering(down, down, canned("stedi_271_active_coverage"),
+                                payer_pauses: pauses, sleeper: sleeper, clock: clock)
+
+      expect(keys(source.eligibility(eligibility_inquiry, idempotency_key: "today"))).to eq(["today-r2"])
+    end
+
+    it "asks again an 80 whose follow-up says Resubmission Not Allowed" do
+      response, = asked(down(code: "80", followup: "Resubmission Not Allowed"), canned("stedi_271_active_coverage"))
+
+      expect(response.state).to eq(:complete)
+    end
+
+    it "waits each pause once and returns the last can't-answer WHEN the payer stays down" do
+      response, transport = asked(down, down, down, down)
+
+      expect([response.state, response.payer_unavailable?, slept, transport.paths.size])
+        .to eq([:payer_silent, true, [1, 5, 10], 4])
+    end
+
+    # Stedi: "79 alone: don't automatically retry", but retry a 42 that comes with a 79.
+    it "asks once WHEN the payer's only refusal is a 79" do
+      response, transport = asked(canned("stedi_271_payer_aaa"))
+
+      expect([response.payer_unavailable?, response.ask_again?, transport.paths.size]).to eq([true, false, 1])
+    end
+
+    it "asks again WHEN a 42 comes beside a 79" do
+      body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_271_payer_down.json")))
+      seventy_nine = { "field" => "AAA", "code" => "79", "description" => "Invalid Participant Identification",
+                       "followupAction" => "Please Correct and Resubmit", "location" => "Loop 2000A" }
+      body["payer"]["aaaErrors"].first["followupAction"] = "Please Resubmit Original Transaction"
+      body["payer"]["aaaErrors"] << seventy_nine
+      response, = asked(canned_body(body), canned("stedi_271_active_coverage"))
+
+      expect([response.state, slept]).to eq([:complete, [1]])
+    end
+
+    it "asks once WHEN the caller passes no pauses" do
+      source, transport = stedi_answering(down, payer_pauses: [], sleeper: sleeper, clock: clock)
+
+      expect([source.eligibility(eligibility_inquiry).state, transport.paths.size]).to eq([:payer_silent, 1])
+    end
+
+    it "starts no ask again that would begin two minutes or more after the first send" do
+      slow = Class.new(CannedSource::Transport) do
+        attr_writer :timer
+
+        define_method(:perform) do |path:, retry_until: nil|
+          @timer.seconds += 50
+          super(path: path, retry_until: retry_until)
+        end
+      end.new([down, down, down, down])
+      slow.timer = clock
+      source = EdiGem::Source::Stedi.new(api_key: "test_key", transport: slow, archive: nil,
+                                         payer_pauses: pauses, sleeper: sleeper, clock: clock)
+      source.eligibility(eligibility_inquiry)
+
+      # Sends at 0-50 s and 51-101 s; a third would start at 106 s and is allowed; the next pause
+      # would end at 166 s, past 120.
+      expect([slow.paths.size, slept]).to eq([3, [1, 5]])
+    end
+
+    it "tells the transport the same two-minute end for every send" do
+      _, transport = asked(down, canned("stedi_271_active_coverage"))
+
+      expect(transport.retry_untils).to eq([120, 120])
     end
   end
 
@@ -382,7 +572,7 @@ RSpec.describe "calling Stedi" do
       source, = stedi_answering(canned("stedi_discovery_complete"), archive: archive)
       kept = source.discovery(discovery_inquiry, archive: { name: "discovery-1" })
 
-      plans = source.archived(kept.stored.response_uri).medical_plans
+      plans = source.archived(kept.stored.response_uri, kind: :discovery).medical_plans
 
       expect(plans.map { |plan| [plan.member_id, plan.person.address.to_h] })
         .to eq([["MOCK00000002", { line1: "123 Example St", line2: "Apt 4", city: "Testville", state: "ZZ",
@@ -392,120 +582,94 @@ RSpec.describe "calling Stedi" do
     it "raises ArchiveFailed when the kept answer is missing" do
       source, = stedi_answering(archive: archive)
 
-      expect { source.archived("file://#{@root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
+      expect { source.archived("file://#{@root}/missing.json", kind: :discovery) }.to raise_error(EdiGem::ArchiveFailed)
     end
   end
 
-  # A discovery collected later is compared with the question sent, never with the caller's record
-  # as it stands then. Every value is made up.
-  describe "#archived_question" do
+  # A check's kept 271 read again, as a discovery's is: the answer already paid for.
+  describe "#archived_eligibility" do
     around do |example|
       Dir.mktmpdir("edi-archive") { |dir| @root = dir and example.run }
     end
 
     let(:archive) { EdiGem::Archive::Local.new(template: "#{@root}/$FEATURE/$DIRECTION") }
-    let(:address) { EdiGem::Address.new(line1: "1 Example St", city: "Example", postal_code: "40000") }
-    let(:given) do
-      EdiGem::Subscriber.new(first_name: "José", last_name: "Núñez", date_of_birth: "19800102", ssn: "000001234",
-                             address: address)
+
+    def kept_check(source) = source.eligibility(eligibility_inquiry, archive: { name: "check-1" })
+
+    it "reads a kept answer again as it was read the day it came, and sends nothing more" do
+      source, transport = stedi_answering(canned("stedi_271_active_coverage"), archive: archive)
+      kept = kept_check(source)
+
+      read = source.archived_eligibility(kept.stored.response_uri)
+
+      expect(read.benefits.map(&:status)).to eq(kept.benefits.map(&:status))
+      expect(transport.paths.size).to eq(1)
     end
 
-    def kept_request(subscriber = given)
-      source, = stedi_answering(canned("stedi_discovery_pending"), archive: archive)
-      inquiry = EdiGem::Inquiry::Discovery.new(subscriber: subscriber, provider: provider, as_of: Date.new(2026, 9, 1))
-      [source, source.discovery(inquiry, archive: { name: "discovery-1" }).stored.request_uri]
+    it "reads a payer's refusals again as they were, with our standing" do
+      source, = stedi_answering(canned("stedi_271_payer_aaa"), archive: archive)
+      kept = kept_check(source)
+
+      read = source.archived_eligibility(kept.stored.response_uri)
+
+      expect([read.rejections.map(&:code), read.provider_standing])
+        .to eq([kept.rejections.map(&:code), kept.provider_standing])
     end
 
-    def file(body)
-      path = File.join(@root, "request.json")
-      File.write(path, body)
-      "file://#{path}"
+    it "keeps nothing again" do
+      source, = stedi_answering(canned("stedi_271_active_coverage"), archive: archive)
+      kept = kept_check(source)
+
+      expect { source.archived_eligibility(kept.stored.response_uri) }
+        .to_not(change { Dir.glob("#{@root}/**/*").size })
     end
 
-    it "recovers who was asked about, as sent, and the day, and sends nothing more" do
-      source, uri = kept_request
-      question = source.archived_question(uri)
+    it "reads a night's kept batch answer again, as the night read it" do
+      source, = stedi_answering(canned("stedi_batch_results_page"), archive: archive)
+      kept = source.batch_results("01JB7Q2F3K8N4X5Y6Z7A8B9C0D", archive: { name: "batch-check-1" }).items.first.response
 
-      expect([question.person.to_h, question.person.address.to_h, question.as_of])
-        .to eq([{ first_name: "JOSE", last_name: "NUNEZ", date_of_birth: Date.new(1980, 1, 2) },
-                { line1: "1 Example St", city: "Example", postal_code: "40000" }, Date.new(2026, 9, 1)])
+      read = source.archived(kept.stored.response_uri, kind: :eligibility)
+
+      expect(read.benefits.map(&:status)).to eq(kept.benefits.map(&:status))
     end
 
-    it "keeps the last four of the SSN sent, comparing as the question it came from" do
-      source, uri = kept_request
-      held = EdiGem::Person.new(role: :subscriber, address_line1: "1 EXAMPLE ST", postal_code: "40000",
-                                ssn: "XXX-XX-1234")
-
-      expect(source.archived_question(uri).person.given_fields(held)).to eq(address: :matched, ssn_last_four: :matched)
-    end
-
-    [false, true].each do |revealed|
-      it "prints no digit of the SSN WHEN EdiGem.reveal is #{revealed}" do
-        source, uri = kept_request
-        person = source.archived_question(uri).person
-        EdiGem.reveal = revealed
-
-        expect([person.inspect, PP.pp(person, +"")].join).to_not include("1234")
-      ensure
-        EdiGem.reveal = false
-      end
-    end
-
-    it "carries neither given detail WHEN the request carried neither, and a birth date that isn't a day as nil" do
-      source, = stedi_answering(archive: archive)
-      body = { subscriber: { firstName: "A", lastName: "B", dateOfBirth: "19801340" },
-               encounter: { beginningDateOfService: "20260901" } }
-      person = source.archived_question(file(JSON.generate(body))).person
-
-      expect([person.date_of_birth, person.address, person.given_fields(nil)]).to eq([nil, nil, {}])
-    end
-
-    it "carries a nil birth date WHEN the request's is a number, null, or a string that isn't a day" do
-      source, = stedi_answering(archive: archive)
-
-      born = [19_800_101, nil, "1980-01-01", "19801340"].map do |day|
-        body = { subscriber: { firstName: "A", lastName: "B", dateOfBirth: day },
-                 encounter: { beginningDateOfService: "20260901" } }
-        source.archived_question(file(JSON.generate(body))).person.date_of_birth
-      end
-
-      expect(born).to eq([nil, nil, nil, nil])
-    end
-
-    it "refuses WHEN no archive is configured" do
+    it "refuses when no archive is configured" do
       source, = stedi_answering
 
-      expect { source.archived_question("file:///kept.json") }.to raise_error(EdiGem::ArchiveNotConfigured)
+      expect { source.archived_eligibility("file:///kept.json") }.to raise_error(EdiGem::ArchiveNotConfigured)
     end
 
-    it "raises ArchiveFailed WHEN the kept request is missing" do
+    it "raises ArchiveFailed when the kept answer is missing" do
       source, = stedi_answering(archive: archive)
 
-      expect { source.archived_question("file://#{@root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
+      expect { source.archived_eligibility("file://#{@root}/missing.json") }.to raise_error(EdiGem::ArchiveFailed)
     end
 
-    it "refuses a uri the archive did not make, nil included" do
+    it "is read by the common name too, as the eligibility kind" do
+      source, = stedi_answering(canned("stedi_271_active_coverage"), archive: archive)
+      kept = kept_check(source)
+
+      read = source.archived(kept.stored.response_uri, kind: :eligibility)
+
+      expect(read.benefits.map(&:status)).to eq(kept.benefits.map(&:status))
+    end
+
+    it "is never read by the common name without its kind" do
       source, = stedi_answering(archive: archive)
 
-      expect { source.archived_question(nil) }
-        .to raise_error(EdiGem::ArchiveFailed) { |failed| expect(failed).to_not be_retryable }
+      expect { source.archived("file://#{@root}/kept.json") }.to raise_error(ArgumentError, /kind/)
     end
 
-    ["<html>", "[]", '{"subscriber":"A"}', '{"subscriber":{}}', '{"subscriber":{},"encounter":"x"}',
-     '{"subscriber":{},"encounter":{"beginningDateOfService":"2026"}}',
-     '{"subscriber":{},"encounter":{"beginningDateOfService":"20261340"}}',
-     '{"subscriber":{},"encounter":{"beginningDateOfService":20260901}}',
-     '{"subscriber":{},"encounter":{"beginningDateOfService":null}}', '{"subscriber":{},"encounter":{}}'].each do |body|
-      it "raises UnreadableBody WHEN the body is #{body}: not JSON, or not a discovery request" do
-        source, = stedi_answering(archive: archive)
+    it "refuses a kind it has no reader for" do
+      source, = stedi_answering(archive: archive)
 
-        expect { source.archived_question(file(body)) }.to raise_error(EdiGem::UnreadableBody)
-      end
+      expect { source.archived("file://#{@root}/kept.json", kind: :batch) }
+        .to raise_error(ArgumentError, /no archived reader/)
     end
   end
 
-  # A discovery poll reads the kept question and answer back, and asks again only when another read
-  # may help: `retryable?` on the ArchiveFailed says which, the same from either archive.
+  # A discovery poll reads the kept answer back, and asks again only when another read may help:
+  # `retryable?` on the ArchiveFailed says which, the same from either archive.
   describe "reading a kept discovery back when the archive fails" do
     around do |example|
       Dir.mktmpdir("edi-archive") { |dir| @root = dir and example.run }
@@ -519,35 +683,35 @@ RSpec.describe "calling Stedi" do
     end
     let(:s3_uri) { "s3://warehouse/edi/discovery/response/discovery-1_20260901T000000000Z.json" }
 
-    def failure(archive, uri, read)
+    def failure(archive, uri, read, **kind)
       source, = stedi_answering(archive: archive)
-      source.public_send(read, uri)
+      source.public_send(read, uri, **kind)
     rescue EdiGem::ArchiveFailed => error
       error
     end
 
-    %i[archived archived_question].each do |read|
+    { archived: { kind: :discovery }, archived_discovery: {} }.each do |read, kind|
       describe "##{read}" do
         it "is not retryable WHEN the local file is missing" do
-          expect(failure(local, "file://#{@root}/missing.json", read)).to_not be_retryable
+          expect(failure(local, "file://#{@root}/missing.json", read, **kind)).to_not be_retryable
         end
 
         it "is not retryable WHEN S3 has no such object" do
           allow(client).to receive(:request).and_return(Net::HTTPNotFound.new("1.1", "404", "NoSuchKey"))
 
-          expect(failure(s3, s3_uri, read)).to_not be_retryable
+          expect(failure(s3, s3_uri, read, **kind)).to_not be_retryable
         end
 
         it "is retryable WHEN S3 answers that it is failing" do
           allow(client).to receive(:request).and_return(Net::HTTPServiceUnavailable.new("1.1", "503", "Slow Down"))
 
-          expect(failure(s3, s3_uri, read)).to be_retryable
+          expect(failure(s3, s3_uri, read, **kind)).to be_retryable
         end
 
         it "is retryable WHEN S3 cannot be reached" do
           allow(client).to receive(:request).and_raise(Net::OpenTimeout)
 
-          expect(failure(s3, s3_uri, read)).to be_retryable
+          expect(failure(s3, s3_uri, read, **kind)).to be_retryable
         end
       end
     end

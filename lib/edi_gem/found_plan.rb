@@ -33,11 +33,14 @@ module EdiGem
     end
 
     # Whether this plan names `other`'s payer as its primary payer, as an MCO's plan names the
-    # state Medicaid plan it manages.
+    # state Medicaid plan it manages: by the payer's code, or by its name. Stedi's Medicaid guide
+    # pairs the two by the related entity's name, since how the entity is coded varies by state.
     def names_as_primary_payer?(other)
-      code = self[:primary_payer_code]
-      !EdiGem.blank?(code) && code == other.payer_code
+      names?(:primary_payer_code, other.payer_code) || names?(:primary_payer_name, other[:payer_name])
     end
+
+    # A payer's code or name as one answer and another may each write it: case and spacing aside.
+    PAYER_KEY = ->(value) { value.to_s.split.join(" ").upcase }
 
     def subscriber_person
       @people.find { |person| !person.dependent? }
@@ -53,22 +56,21 @@ module EdiGem
       dependent_people.first || subscriber_person
     end
 
-    # How the person matched compares with who was asked about (Identity.compare's options).
-    def identify(asked, **options)
-      Identification.of(person, asked, **options)
-    end
-
     # Whether the plan covers the person on this day (Coverage's two-part test).
     def coverage_on(date)
       Coverage.on(@benefits, date)
     end
 
-    # What the plan's lines say of the person it names on this day (a Finding): covered,
-    # not_covered or no_answer. Whether that person is the one asked about is #identify's.
-    def finding(on:) = Finding.of_coverage(coverage_on(on))
-
     def concealed_inspect
       "#<#{self.class} benefits=#{@benefits.size} people=#{@people.map(&:role).join(",")}>"
+    end
+
+    private
+
+    # Whether this plan's `field` holds `value`, by PAYER_KEY; never when the field is blank.
+    def names?(field, value)
+      named = self[field]
+      !EdiGem.blank?(named) && PAYER_KEY.call(named) == PAYER_KEY.call(value)
     end
   end
 end

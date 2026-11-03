@@ -104,11 +104,11 @@ module EdiGem
     def credentials_for(payer_code) = Array(@attrs.dig("payer_credentials", payer_code.to_s)).map(&:to_sym)
 
     # A source may narrow which retryable kinds it retries, never make a terminal kind retryable.
-    def retry?(kind)
-      return false unless Fault::KINDS.fetch(kind.to_sym, {})[:retryable]
+    def retry?(kind) = Fault::KINDS.fetch(kind.to_sym, {}).fetch(:retryable, false) && retry_listed?("retry_on", kind)
 
-      Array(retry_config["retry_on"]).map(&:to_sym).include?(kind.to_sym)
-    end
+    # Whether a retried kind is retried until the send's end (Transport#perform's `retry_until`), not
+    # `attempts` times.
+    def retry_until_end?(kind) = retry?(kind) && retry_listed?("retry_until_end", kind)
 
     # Seconds to wait before attempt n (1-based), with jitter.
     def delay_before(attempt, random: Kernel)
@@ -122,6 +122,11 @@ module EdiGem
       found = table[status.to_s] || table["#{status.to_s[0]}xx"]
       found&.to_sym
     end
+
+    # Whether a failing HTTP status may carry an answer in its body (`errors.answer_in_status`), so it
+    # is read before its status decides: Stedi answers a payer it can't connect to with a 400 that
+    # holds an AAA 79.
+    def answer_in_status?(status) = Array(@attrs.dig("errors", "answer_in_status")).map(&:to_s).include?(status.to_s)
 
     # The Fault kind for a raised exception, matched up its ancestry.
     def kind_for_exception(error)
@@ -154,5 +159,7 @@ module EdiGem
     end
 
     def retry_config = @attrs["retry"] || {}
+
+    def retry_listed?(key, kind) = Array(retry_config[key]).map(&:to_sym).include?(kind.to_sym)
   end
 end

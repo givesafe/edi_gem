@@ -133,12 +133,14 @@ RSpec.describe EdiGem::RequestKey do
       expect(fingerprints.uniq).to eq ["94ea0de47974b17bc7aa546cd7fd6b6c5b4db41e37e448d352d3ef764d637610"]
     end
 
-    it "gives a discovery the key and fingerprint the app gave it" do
+    # Pinned since a discovery's names went as sent (Oct 25), before the gem's first release, so no stored key
+    # had the earlier value.
+    it "gives a discovery the key and fingerprint of its names as sent" do
       asked = discovery(addressed)
 
       expect([asked.idempotency_key(secret: secret, on: day), asked.fingerprint(secret: secret)])
-        .to eq(%w[ac514e3466765f35016e9d1739aa3d57772f62dc48b3e3439005d211cc306e46
-                  ea11b8e0ebb3472ef83a25a7ffa2ce7e5843ea2e11caa113f5ac0d74073b3cbc])
+        .to eq(%w[d38cb087aeb500a77ee249d4876f98284f4bfdfc8e7097dffc6a604cf04358cc
+                  7285a7c75709a38a1d9659f0c1a40fc2b885cfd5d1b2d34743ad02135897eefe])
     end
 
     it "makes a discovery with an SSN a different question" do

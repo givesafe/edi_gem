@@ -77,6 +77,89 @@ RSpec.describe EdiGem::Transport do
     end
   end
 
+  # A real-time check waits for Stedi's answer, and asking again stops two minutes after the first
+  # send: `retry_until` is that end on the transport's clock.
+  describe "a retry that would start after retry_until" do
+    let(:clock) { double("clock") }
+
+    subject(:transport) do
+      described_class.new(policy: policy, sleeper: sleeper, random: random, clock: clock)
+    end
+
+    it "retries while the wait ends before retry_until" do
+      allow(clock).to receive(:clock_gettime).and_return(10)
+      responses = [failing(503), ok]
+
+      expect(transport.perform(path: "/x", retry_until: 120) { responses.shift }).to_not be_nil
+    end
+
+    it "raises the fault rather than wait past retry_until" do
+      allow(clock).to receive(:clock_gettime).and_return(119.5)
+      calls = 0
+
+      expect { transport.perform(path: "/x", retry_until: 120) { calls += 1 and failing(503) } }
+        .to raise_error(EdiGem::Fault)
+      expect([calls, slept]).to eq([1, []])
+    end
+
+    context "WHEN the policy retries the kind until the end" do
+      let(:policy) do
+        EdiGem::Policy.new(:test, "retry" => { "attempts" => 3, "backoff" => 1, "multiplier" => 1,
+                                               "jitter" => 0, "retry_on" => %w[rate_limited vendor_unavailable],
+                                               "retry_until_end" => %w[rate_limited] },
+                                  "errors" => { "status" => { "429" => "rate_limited",
+                                                              "5xx" => "vendor_unavailable" } })
+      end
+      let(:seconds) { [0] }
+
+      before { allow(clock).to receive(:clock_gettime) { seconds.first } }
+
+      def tick(response) = response.tap { seconds[0] += 10 }
+
+      # Stedi, eligibility troubleshooting: a 429 is a 42, "Retry immediately", for up to 2 minutes.
+      it "retries Stedi busy past its attempts, until the end" do
+        calls = 0
+
+        expect { transport.perform(path: "/x", retry_until: 120) { (calls += 1) && tick(failing(429)) } }
+          .to raise_error(an_instance_of(EdiGem::Fault).and(having_attributes(kind: :rate_limited)))
+        # Each send takes 10 s: sends start at 0, 10, ... 110 s; the next would start past 120.
+        expect(calls).to eq(12)
+      end
+
+      it "returns the response once a retry past its attempts succeeds" do
+        responses = [failing(429), failing(429), failing(429), ok]
+
+        expect(transport.perform(path: "/x", retry_until: 120) { tick(responses.shift) }).to_not be_nil
+      end
+
+      it "keeps to its attempts for another kind" do
+        calls = 0
+
+        expect { transport.perform(path: "/x", retry_until: 120) { (calls += 1) && tick(failing(503)) } }
+          .to raise_error(EdiGem::Fault)
+        expect(calls).to eq(3)
+      end
+
+      it "keeps to its attempts for a send with no end" do
+        calls = 0
+
+        expect { transport.perform(path: "/x") { (calls += 1) && tick(failing(429)) } }.to raise_error(EdiGem::Fault)
+        expect(calls).to eq(3)
+      end
+    end
+
+    # The eligibility timeout (125 s) is longer than the two minutes, so a timed-out check is never
+    # sent again, whatever attempts the caller's policy allows.
+    it "never retries a timeout that came after retry_until" do
+      allow(clock).to receive(:clock_gettime).and_return(125)
+      calls = 0
+
+      expect { transport.perform(path: "/x", retry_until: 120) { (calls += 1) && raise(Net::OpenTimeout) } }
+        .to raise_error(an_instance_of(EdiGem::Fault).and(having_attributes(kind: :timeout)))
+      expect(calls).to eq(1)
+    end
+  end
+
   describe "a status the policy calls terminal" do
     it "raises without a second attempt" do
       calls = 0
@@ -89,6 +172,23 @@ RSpec.describe EdiGem::Transport do
     it "raises the commonized meaning rather than the vendor's status" do
       expect { transport.perform(path: "/x") { failing(401) } }
         .to raise_error(an_object_having_attributes(kind: :not_authorized))
+    end
+  end
+
+  describe "a status whose body the policy reads for an answer" do
+    let(:policy) do
+      EdiGem::Policy.new(:test, "errors" => { "status" => { "4xx" => "malformed_request" },
+                                              "answer_in_status" => %w[400] })
+    end
+
+    it "returns the response, to be read" do
+      response = failing(400)
+      expect(transport.perform(path: "/x") { response }).to be(response)
+    end
+
+    it "raises any other failing status from its status alone" do
+      expect { transport.perform(path: "/x") { failing(404) } }
+        .to raise_error(an_object_having_attributes(kind: :malformed_request, status: 404, path: "/x"))
     end
   end
 

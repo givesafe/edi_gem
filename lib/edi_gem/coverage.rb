@@ -11,10 +11,12 @@ module EdiGem
     PLAN = "30"
 
     # A plan term on 30 (a co-payment, a deductible, a limitation) implies the person is covered.
-    # These don't: they describe what surrounds the coverage (another payer, whom to contact, a
-    # lost card, where the data came from, a disclaimer), not the coverage itself.
-    NOT_IMPLYING = %i[other_payer contact_entity card_lost_or_stolen other_data_source
-                      benefit_disclaimer].freeze
+    # These don't: they describe what surrounds the coverage (another payer, the managed care plan
+    # that coordinates it, whom to contact, a lost card, where the data came from, a disclaimer),
+    # not the coverage itself. Stedi reads a managed care coordinator line, like another payer's,
+    # as naming a plan, and never as saying the person is covered.
+    NOT_IMPLYING = %i[other_payer managed_care_coordinator contact_entity card_lost_or_stolen
+                      other_data_source benefit_disclaimer].freeze
 
     # `status` is :active, :inactive, :non_covered, :cannot_process, or nil when no line on 30
     # decides. `code` is the EB01 status code of the line that decided (1 to 8, I, V); nil when

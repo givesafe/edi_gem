@@ -4,8 +4,11 @@
 # is made up.
 RSpec.describe EdiGem::Finding do
   let(:day) { Date.new(2026, 6, 1) }
-  let(:asked) { { first_name: "Testfirst", last_name: "Testlast", date_of_birth: Date.new(1980, 1, 1) } }
   let(:held) { { first_name: "TESTFIRST", last_name: "TESTLAST", date_of_birth: "19800101" } }
+
+  # Comparing the person is the caller's, so the identification here answers only what Finding
+  # asks of it: whether the answer is about someone else.
+  let(:identified) { Struct.new(:mismatched?) }
 
   def line(status, code = nil)
     EdiGem::Benefit.new(status: status, status_code: code, service_types: ["30"])
@@ -15,9 +18,11 @@ RSpec.describe EdiGem::Finding do
     EdiGem::Rejection.new(level: level, code: code)
   end
 
-  def checked(benefits: [], rejections: [], people: [EdiGem::Person.new(role: :subscriber, **held)], **response)
+  # What a check finds of an answer on the day.
+  def checked(benefits: [], rejections: [], mismatched: false, **response)
+    people = [EdiGem::Person.new(role: :subscriber, **held)]
     answer = EdiGem::Response.new(benefits: benefits, rejections: rejections, people: people, **response)
-    answer.checked_plan(identification: answer.identify(asked))
+    described_class.of_check(answer, identified.new(mismatched), on: day)
   end
 
   describe "a check's" do
@@ -28,20 +33,18 @@ RSpec.describe EdiGem::Finding do
       "no_answer WHEN the payer can't process" => [{ benefits: [:cannot_process, "V"] }, :no_answer, "V"]
     }.each do |example, (given, name, code)|
       it "is #{example}" do
-        finding = checked(benefits: [line(*given[:benefits])]).finding(on: day)
+        finding = checked(benefits: [line(*given[:benefits])])
 
         expect([finding.name, finding.code]).to eq [name, code]
       end
     end
 
     it "is not_covered WHEN the payer answered with no lines" do
-      expect(checked(settled: true, handle: "h").finding(on: day)).to have_attributes(name: :not_covered, code: nil)
+      expect(checked(settled: true, handle: "h")).to have_attributes(name: :not_covered, code: nil)
     end
 
     it "is someone_else WHEN the answer is about another person, however it says they are covered" do
-      other = EdiGem::Person.new(role: :subscriber, first_name: "OTHER", last_name: "PERSON", date_of_birth: "19700101")
-
-      expect(checked(benefits: [line(:active, "1")], people: [other]).finding(on: day)).to be_someone_else
+      expect(checked(benefits: [line(:active, "1")], mismatched: true)).to be_someone_else
     end
 
     {
@@ -53,42 +56,42 @@ RSpec.describe EdiGem::Finding do
       date_out_of_range: :our_fault, date_of_death_conflict: :not_covered
     }.each do |reason, name|
       it "is #{name} WHEN the payer refuses the person as #{reason}" do
-        finding = checked(rejections: [refusal(:subscriber, reason)]).finding(on: day)
+        finding = checked(rejections: [refusal(:subscriber, reason)])
 
         expect([finding.name, finding.code]).to eq [name, reason]
       end
     end
 
     it "is held_differently WHEN the dependent's birth date is refused" do
-      expect(checked(rejections: [refusal(:dependent, :date_of_birth_mismatch)]).finding(on: day))
+      expect(checked(rejections: [refusal(:dependent, :date_of_birth_mismatch)]))
         .to be_held_differently
     end
 
     it "is provider_refused WHEN the payer refuses our provider" do
-      finding = checked(rejections: [refusal(:provider, :provider_not_on_file)]).finding(on: day)
+      finding = checked(rejections: [refusal(:provider, :provider_not_on_file)])
 
       expect([finding.name, finding.code]).to eq %i[provider_refused provider_not_on_file]
     end
 
     it "is our_fault WHEN our request is refused at the envelope" do
-      expect(checked(rejections: [refusal(:envelope, :input_errors)]).finding(on: day)).to be_our_fault
+      expect(checked(rejections: [refusal(:envelope, :input_errors)])).to be_our_fault
     end
 
     it "is no_answer WHEN the payer is silent" do
-      finding = checked(rejections: [refusal(:payer, :payer_unavailable)]).finding(on: day)
+      finding = checked(rejections: [refusal(:payer, :payer_unavailable)])
 
       expect([finding.name, finding.code]).to eq %i[no_answer payer_unavailable]
     end
 
     it "is pending WHEN the answer hasn't arrived" do
-      expect(checked(handle: "h").finding(on: day)).to be_pending
+      expect(checked(handle: "h")).to be_pending
     end
   end
 
   # A caller that records one word reads inactive? and line_code beside the name.
   describe "a check's line" do
     it "is inactive WHEN the line says inactive, with its code" do
-      finding = checked(benefits: [line(:inactive, "6")]).finding(on: day)
+      finding = checked(benefits: [line(:inactive, "6")])
 
       expect([finding.inactive?, finding.line_code]).to eq [true, "6"]
     end
@@ -96,30 +99,27 @@ RSpec.describe EdiGem::Finding do
     it "is inactive WHEN the plan's dates ended before the day, whatever the line's code says" do
       ended = EdiGem::Benefit.new(status: :active, status_code: "1", service_types: ["30"], ends_on: "20260430")
 
-      expect(checked(benefits: [ended]).finding(on: day)).to have_attributes(name: :not_covered, inactive?: true,
-                                                                             line_code: nil)
+      expect(checked(benefits: [ended])).to have_attributes(name: :not_covered, inactive?: true, line_code: nil)
     end
 
     it "is not inactive WHEN the line says not covered (I)" do
-      expect(checked(benefits: [line(:non_covered, "I")]).finding(on: day)).to_not be_inactive
+      expect(checked(benefits: [line(:non_covered, "I")])).to_not be_inactive
     end
 
     it "is none WHEN the state decided, though status lines came with it" do
       finding = checked(benefits: [line(:inactive, "6")], rejections: [refusal(:subscriber, :member_id_invalid)])
-                .finding(on: day)
 
       expect([finding.name, finding.inactive?, finding.line_code]).to eq [:not_on_this_id, false, nil]
     end
 
     it "is none WHEN the answer is about someone else" do
-      other = EdiGem::Person.new(role: :subscriber, first_name: "OTHER", last_name: "PERSON", date_of_birth: "19700101")
-      finding = checked(benefits: [line(:inactive, "6")], people: [other]).finding(on: day)
+      finding = checked(benefits: [line(:inactive, "6")], mismatched: true)
 
       expect([finding.inactive?, finding.line_code]).to eq [false, nil]
     end
 
     it "is none WHEN the payer is silent, though it named a code" do
-      finding = checked(rejections: [refusal(:payer, :payer_unavailable)]).finding(on: day)
+      finding = checked(rejections: [refusal(:payer, :payer_unavailable)])
 
       expect([finding.code, finding.line_code]).to eq [:payer_unavailable, nil]
     end
@@ -130,7 +130,7 @@ RSpec.describe EdiGem::Finding do
 
     def finding_of(answer) = described_class.of_search(answer)
 
-    # A discovery with plans is read plan by plan (FoundPlan#finding), by the caller who chose them.
+    # A discovery with plans is read plan by plan (Finding.of_coverage), by the caller who chose them.
     {
       "not_covered WHEN the payer matched nobody" => [[], :not_covered],
       "not_covered WHEN the subscriber was not found" => [[%i[subscriber subscriber_not_found]], :not_covered],
@@ -160,18 +160,20 @@ RSpec.describe EdiGem::Finding do
   end
 
   describe "a discovery plan's" do
-    def found(*benefits) = EdiGem::FoundPlan.new(benefits: benefits, people: [])
+    def found(*benefits)
+      described_class.of_coverage(EdiGem::FoundPlan.new(benefits: benefits, people: []).coverage_on(day))
+    end
 
     it "is covered WHEN its line is active" do
-      expect(found(line(:active, "1")).finding(on: day)).to have_attributes(name: :covered, code: "1")
+      expect(found(line(:active, "1"))).to have_attributes(name: :covered, code: "1")
     end
 
     it "is not_covered WHEN its line is inactive" do
-      expect(found(line(:inactive, "6")).finding(on: day)).to be_not_covered
+      expect(found(line(:inactive, "6"))).to be_not_covered
     end
 
     it "is no_answer WHEN no line decides" do
-      expect(found.finding(on: day)).to be_no_answer
+      expect(found).to be_no_answer
     end
   end
 

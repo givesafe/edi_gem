@@ -73,16 +73,10 @@ module EdiGem
         unsupported(:discovery)
       end
 
-      # A discovery answer the archive kept (a Stored's response_uri), read again into a Response
-      # without sending anything.
-      def archived(_response_uri)
-        unsupported(:discovery)
-      end
-
-      # The question an archived discovery request carried (a Stored's request_uri), as an
-      # Inquiry::Question, read without sending anything.
-      def archived_question(_request_uri)
-        unsupported(:discovery)
+      # An answer the archive kept (a Stored's response_uri), read again into a Response by its
+      # `kind` (:eligibility or :discovery) without sending anything.
+      def archived(_response_uri, kind:)
+        unsupported(kind)
       end
 
       # Submits many eligibility checks as one batch. `inquiries` is a Hash of the caller's
@@ -98,13 +92,14 @@ module EdiGem
       end
 
       # One Batch::Checks page. Pass the previous page's `next_page_token` to read the next.
-      # `archive:` files each check's raw answer, as for the other features.
-      def batch_checks(_batch_id, page_token: nil, page_size: nil, archive: nil)
+      # `archive:` files each check's raw answer, as for the other features. A source may take
+      # `only:` (identifiers) beside them, to keep the checks sent under those alone.
+      def batch_checks(_batch_id, page_token: nil, page_size: nil, archive: nil, **_options)
         unsupported(:batch)
       end
 
       # One Batch::Answers page: the full answer of each check in the batch that has finished.
-      def batch_results(_batch_id, page_token: nil, page_size: nil, archive: nil)
+      def batch_results(_batch_id, page_token: nil, page_size: nil, archive: nil, **_options)
         unsupported(:batch)
       end
 
@@ -116,6 +111,11 @@ module EdiGem
       # The source's own payer code for a code or alias from any answer, or nil when no single
       # payer answers to it.
       def payer_id_for(_payer_code)
+        unsupported(:payer_directory)
+      end
+
+      # The one ListedPayer that answers to a code or alias, or nil when no single payer does.
+      def listed_payer_for(_payer_code)
         unsupported(:payer_directory)
       end
       # rubocop:enable Lint/UnusedMethodArgument

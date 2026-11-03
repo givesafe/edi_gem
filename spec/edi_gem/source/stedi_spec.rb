@@ -34,6 +34,14 @@ RSpec.describe EdiGem::Source::Stedi do
       expect(policy.for_operation(:discovery).timeout).to be > 120
     end
 
+    it "polls a discovery's results at the discovery's own path" do
+      expect(policy.path_for(:discovery_results)).to eq(policy.path_for(:discovery))
+    end
+
+    it "waits out results that take the whole of the vendor's 120 seconds" do
+      expect(policy.for_operation(:discovery_results).timeout).to be > 120
+    end
+
     it "goes slower for discovery than for an eligibility check" do
       expect(policy.for_operation(:discovery).throttle_per_second)
         .to be < policy.for_operation(:eligibility).throttle_per_second
@@ -152,6 +160,19 @@ RSpec.describe EdiGem::Source::Stedi do
 
       expect(stedi.eligibility_body(dated)[:encounter])
         .to eq(serviceTypeCodes: ["30"], dateOfService: "20260903")
+    end
+
+    it "sends a suffix in its own field and no title, as Stedi asks" do
+      suffixed = EdiGem::Subscriber.new(member_id: "MEM123", first_name: "Dr Ada", last_name: "Lovelace Jr.",
+                                        date_of_birth: "19151210")
+      inquiry = EdiGem::Inquiry::Eligibility.new(payer_code: "12345", subscriber: suffixed, provider: provider)
+
+      expect(stedi.eligibility_body(inquiry)[:subscriber])
+        .to include(firstName: "ADA", lastName: "LOVELACE", suffix: "JR")
+    end
+
+    it "sends no suffix WHEN the last name has none" do
+      expect(stedi.eligibility_body(eligibility_inquiry)[:subscriber]).to_not have_key(:suffix)
     end
 
     it "raises PayerNotRouted when the inquiry carries no payer code" do

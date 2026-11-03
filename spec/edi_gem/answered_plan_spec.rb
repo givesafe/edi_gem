@@ -4,7 +4,6 @@
 RSpec.describe EdiGem::AnsweredPlan do
   let(:day) { Date.new(2026, 6, 1) }
   let(:held) { { first_name: "TESTFIRST", last_name: "TESTLAST", date_of_birth: "19800101" } }
-  let(:asked) { { first_name: "Testfirst", last_name: "Testlast", date_of_birth: Date.new(1980, 1, 1) } }
   let(:benefits) do
     [EdiGem::Benefit.new(status: :active, service_types: ["30"], insurance_type: "MC", member_id: "MOCKID0002",
                          payer_code: "P1", plan_name: "EXAMPLE PLAN", plan_number: "PLAN01",
@@ -13,16 +12,20 @@ RSpec.describe EdiGem::AnsweredPlan do
   end
   let(:person) { EdiGem::Person.new(role: :subscriber, relationship_code: "18", **held) }
 
-  # The payer refused the birth date it was sent (AAA 71).
-  let(:refusal) { [EdiGem::Rejection.new(level: :subscriber, code: :date_of_birth_mismatch)] }
-
-  # Each host builds `plan` from `answer(benefits:, people:, rejections:)`.
+  # Each host builds `plan` from `answer(benefits:, people:)`.
   shared_examples "an answered plan" do
     let(:plan) { answer(benefits: benefits, people: [person]) }
 
     it "answers the payer, the IDs and the plan's names in the same words" do
       expect([plan.payer_code, plan.member_id, plan.medicaid_id, plan.plan_name, plan.plan_number, plan.group_number])
         .to eq(["P1", "MOCKID0002", "MEDID0001", "EXAMPLE PLAN", "PLAN01", "GRP01"])
+    end
+
+    it "names the ID the member ID replaced, as the payer sent it, and none WHEN it names none" do
+      replaced = answer(benefits: [EdiGem::Benefit.new(status: :active, member_id: "MOCKID0002",
+                                                       prior_member_id: "MOCKID0001")], people: [person])
+
+      expect([replaced.prior_member_id, plan.prior_member_id]).to eq(["MOCKID0001", nil])
     end
 
     it "says the plan is active on the day" do
@@ -33,37 +36,12 @@ RSpec.describe EdiGem::AnsweredPlan do
       expect(plan.relationship).to eq :self
     end
 
-    it "compares who the payer answered about with who was asked" do
-      expect(plan.identification.match).to eq :matched
-    end
-
     it "gives the lines to keep, each in the shared words" do
       expect(plan.lines.map(&:to_h))
         .to eq([{ benefit_type: :active, service_types: ["30"], insurance_type: "MC", plan_name: "EXAMPLE PLAN",
                   in_network: nil },
                 { benefit_type: :co_payment, service_types: %w[98 UC], insurance_type: nil, plan_name: nil,
                   in_network: true }])
-    end
-
-    it "is mismatched WHEN the payer answered about someone else, and the plan's status is still its own" do
-      other = EdiGem::Person.new(role: :subscriber, relationship_code: "18", **held, first_name: "OTHER")
-      plan = answer(benefits: benefits, people: [other])
-
-      expect([plan.identification.match, plan.status_on(day), plan.relationship]).to eq(%i[mismatched active self])
-    end
-
-    it "is the dependent WHEN the payer matched the person as one" do
-      other = EdiGem::Person.new(role: :subscriber, relationship_code: "18", **held, first_name: "OTHER")
-      dependent = EdiGem::Person.new(role: :dependent, relationship_code: "19", **held)
-      plan = answer(benefits: benefits, people: [other, dependent])
-
-      expect([plan.relationship, plan.identification.match]).to eq(%i[dependent matched])
-    end
-
-    it "has no relationship WHEN the payer named nobody, and compares nothing" do
-      plan = answer(benefits: benefits, people: [])
-
-      expect([plan.relationship, plan.identification.match]).to eq([nil, :not_compared])
     end
 
     it "is inactive WHEN the plan's line says so" do
@@ -99,6 +77,14 @@ RSpec.describe EdiGem::AnsweredPlan do
       end
     end
 
+    # Payers send 9999-12-31 until the plan ends (Stedi's Medicaid guide), so it is no end date.
+    it "has no end date WHEN the payer sent the placeholder year 9999" do
+      dated = answer(benefits: [EdiGem::Benefit.new(status: :active, plan_begins_on: "20260101",
+                                                    plan_ends_on: "99991231")], people: [person])
+
+      expect([dated.plan_begins_on, dated.plan_ends_on]).to eq([Date.new(2026, 1, 1), nil])
+    end
+
     it "has nil fields WHEN the lines name none" do
       expect(fields(answer(benefits: [EdiGem::Benefit.new(status: :active)], people: [person]))).to eq([nil] * 6)
     end
@@ -109,34 +95,43 @@ RSpec.describe EdiGem::AnsweredPlan do
   end
 
   describe EdiGem::CheckedPlan do
-    def answer(benefits:, people:, rejections: [])
-      response = EdiGem::Response.new(benefits: benefits, people: people, rejections: rejections)
-      response.checked_plan(identification: response.identify(asked))
+    # Who the caller read the answer to be about: the part the person came back in, and the match.
+    let(:reading) { Struct.new(:answered_as, :match) }
+
+    def answer(benefits:, people:, answered_as: :subscriber)
+      EdiGem::Response.new(benefits: benefits, people: people)
+                      .checked_plan(identification: reading.new(answered_as, :matched))
     end
 
     it_behaves_like "an answered plan"
 
-    it "carries the payer's refusal of the person, with no relationship, the plan's status its own" do
-      plan = answer(benefits: benefits, people: [person], rejections: refusal)
+    it "is the dependent WHEN the caller read the answer as about one, the plan's status its own" do
+      plan = answer(benefits: benefits, people: [person], answered_as: :dependent)
 
-      expect([plan.identification.match, plan.identification.reason, plan.relationship, plan.status_on(day)])
-        .to eq([:mismatched, :date_of_birth_mismatch, nil, :active])
+      expect([plan.relationship, plan.status_on(day)]).to eq(%i[dependent active])
+    end
+
+    it "has no relationship WHEN the caller read nobody" do
+      expect(answer(benefits: benefits, people: [person], answered_as: nil).relationship).to be_nil
     end
   end
 
   describe EdiGem::MedicalPlan do
-    def answer(benefits:, people:, rejections: [])
+    def answer(benefits:, people:)
       found = EdiGem::FoundPlan.new(benefits: benefits, people: people)
-      EdiGem::Response.new(found_plans: [found], rejections: rejections)
-                      .medical_plans(asked: EdiGem::Person::Asked.new(**asked)).fetch(0)
+      EdiGem::Response.new(found_plans: [found]).medical_plans.fetch(0)
     end
 
     it_behaves_like "an answered plan"
 
-    it "never carries a refusal: a discovery's refusals are about the whole answer" do
-      plan = answer(benefits: benefits, people: [person], rejections: refusal)
+    it "is the dependent WHEN the payer matched the person as one" do
+      dependent = EdiGem::Person.new(role: :dependent, relationship_code: "19", **held)
 
-      expect([plan.identification.match, plan.identification.refusal, plan.relationship]).to eq([:matched, nil, :self])
+      expect(answer(benefits: benefits, people: [person, dependent]).relationship).to eq(:dependent)
+    end
+
+    it "has no relationship WHEN the payer named nobody" do
+      expect(answer(benefits: benefits, people: []).relationship).to be_nil
     end
   end
 

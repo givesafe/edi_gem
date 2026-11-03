@@ -2,8 +2,8 @@
 
 module EdiGem
   # The plan an eligibility check's answer is about, read as an AnsweredPlan. A check asks about
-  # one plan, so the whole answer is that plan. `identification` is the Response's for the person
-  # asked about (Response#identify), and decides the relationship.
+  # one plan, so the whole answer is that plan. `identification` is the caller's reading of who the
+  # answer is about (anything answering answered_as and match), and decides the relationship.
   class CheckedPlan
     include Concealed
     include PlanFields
@@ -27,14 +27,8 @@ module EdiGem
     def plan_number = naming_benefit&.plan_number
 
     # Whether the plan covers the person on this day (Coverage's two-part test); status_on reads it.
-    # A check's finding, which weighs who the payer answered about, is #finding.
+    # It does not weigh who the payer answered about; that is the caller's.
     def coverage_on(date) = @response.coverage_on(date)
-
-    # What the answer established about the person asked about, on the day (a Finding). A check
-    # names no date of service, so the payer answers about the day it was asked. An answer about
-    # someone else (`identification` mismatched) is never their coverage; with nobody compared, only
-    # the payer's refusal can say so. Its line_code is the code to record beside it.
-    def finding(on:) = Finding.of_check(@response, @identification, on: on)
 
     # As the payer answered: :self about the subscriber, :dependent about a dependent. nil when
     # nobody was compared or the payer refused the person.

@@ -72,10 +72,10 @@ module EdiGem
         # Plans that name no birth date, so there is nothing to confirm the person by.
         def unverified = of(@person.except("dateOfBirth")).for(:active)
 
-        # The person as a payer spells them: plain, and a long first name cut short. Still the
+        # The person as a payer spells them: payer_normalized, and a long first name cut short. Still the
         # person asked about.
         def spelled
-          first_name, last_name = @person.values_at("firstName", "lastName").map { |name| Identity.plain(name) }
+          first_name, last_name = @person.values_at("firstName", "lastName").map { Identity.payer_normalized(_1) }
           person = @person.merge("firstName" => first_name.to_s[0, Identity::TRUNCATED_AT], "lastName" => last_name)
           of(person).for(:active)
         end
@@ -86,7 +86,7 @@ module EdiGem
 
         # Stedi puts the patient in `dependent` and the policyholder in `subscriber`.
         def dependent
-          patient = @person.slice("firstName", "lastName", "dateOfBirth").merge(CHILD)
+          patient = @person.slice("firstName", "lastName", "suffix", "dateOfBirth").merge(CHILD)
           each_payer("1").map do |found|
             found.merge("subscriber" => found["subscriber"].merge(POLICYHOLDER), "dependent" => patient)
           end
@@ -128,7 +128,7 @@ module EdiGem
 
         # `name` is the status's label; the plan's own name is in `planCoverage`, as Stedi sends it.
         def item(payer, code, member_id: "MOCK#{payer}", service_types: MEDICAL)
-          { "subscriber" => @person.slice("firstName", "lastName", "dateOfBirth")
+          { "subscriber" => @person.slice("firstName", "lastName", "suffix", "dateOfBirth")
                                    .merge("memberId" => member_id, **SELF, **ON_RECORD),
             "payer" => { "name" => "MOCK PAYER #{payer}", "payorIdentification" => payer },
             "benefitsInformation" => [{ "code" => code, "name" => code.to_i <= 5 ? "Active Coverage" : "Inactive",

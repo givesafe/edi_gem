@@ -7,24 +7,25 @@ module EdiGem
   #
   #   payer_code       the payer's code as the answer gives it, or nil
   #   member_id        the subscriber's insurance ID (a dependent is on the subscriber's), or nil
+  #   prior_member_id  the ID member_id replaced, when the payer names it (X12 REF Q4, "Prior
+  #                    Identifier Number"; Stedi's planInformation.priorIdNumber), or nil. It may
+  #                    equal member_id: the payer's own words, read as sent
   #   medicaid_id      the state Medicaid ID tied to the plan, or nil
   #   plan_name        the payer's name for the plan, or nil (each host says which line names it)
   #   plan_number      the payer's number for the plan, or nil
   #   group_number     the employer or group number, or nil when the answer holds none
   #   status_on(date)  what the plan's own lines say of that day (Coverage's two-part test):
   #                    :active, :inactive, or :unknown when they say neither. Not knowing is not
-  #                    a denial. It does not weigh who the payer answered about: a check's finding,
-  #                    which does, is CheckedPlan#finding
+  #                    a denial. It does not weigh who the payer answered about; the caller does
   #   relationship     :self or :dependent, as the payer said; nil when it did not say, nobody
   #                    was compared, or the payer refused the person
-  #   identification   who the payer answered about, compared with who was asked (Identification).
-  #                    A check's carries the payer's refusal of the person, which wins; a
-  #                    discovery's refusals are about the whole answer, so a plan's never does
   #   lines            the benefit lines worth keeping, as Lines; none when the payer sent none
   #   plan_begins_on   the plan's own begin and end dates, as Dates: planDateInformation's `plan`
   #   plan_ends_on     (a day or a range) when sent, else its planBegin and planEnd. nil when the
   #                    answer holds none, or a value that is not a YYYYMMDD string naming a real
-  #                    day. Never a line's dates, nor the eligibility period Coverage weighs
+  #                    day. Never a line's dates, nor the eligibility period Coverage weighs.
+  #                    An end in the year 9999 is nil too: payers send it as a placeholder until
+  #                    the plan ends, so it is no end date
   #
   # The status code behind status_on is coverage_on(date).code, from the one Finding that decides
   # the status: nil when the plan's dates or an implied term decided.
@@ -60,14 +61,23 @@ module EdiGem
       STATUSES.include?(status) ? status : :unknown
     end
 
+    # The year many payers put in a plan's end date until the plan ends (9999-12-31), as Stedi's
+    # Medicaid guide says; it tells nothing of when the plan ends.
+    PLACEHOLDER_YEAR = 9999
+
     def plan_begins_on = Codec.day(self[:plan_begins_on])
-    def plan_ends_on = Codec.day(self[:plan_ends_on])
+
+    def plan_ends_on
+      day = Codec.day(self[:plan_ends_on])
+      day unless day&.year == PLACEHOLDER_YEAR
+    end
 
     # The plan's fields as the plan as a whole holds them (`[]`). A host overrides the ones it
     # reads elsewhere: a check's plan is named by its first active line, and a discovery's
     # Medicaid ID may come from the Medicaid plan beside it.
     def payer_code = self[:payer_code]
     def member_id = self[:member_id]
+    def prior_member_id = self[:prior_member_id]
     def medicaid_id = self[:state_insurance_id]
     def plan_name = self[:plan_name]
     def plan_number = self[:plan_number]

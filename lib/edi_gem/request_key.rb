@@ -22,9 +22,10 @@ module EdiGem
       OpenSSL::HMAC.hexdigest("SHA256", secret, JSON.generate(normalized.sort.to_h))
     end
 
-    # The same operation and details on the same day give the same key: it is Stedi's
-    # Idempotency-Key header, so one question is paid for once a day. `on` is the caller's today,
-    # in the caller's time zone.
+    # The same operation and details on the same day give the same key, sent as the Idempotency-Key
+    # header. Stedi documents no idempotency key for eligibility or discovery, so the caller keeping
+    # one question to one key a day is what keeps it paid for once. `on` is the caller's today, in
+    # the caller's time zone.
     def idempotency_key(operation, details, secret:, on:)
       raise ArgumentError, "unknown operation #{operation}" unless OPERATIONS.include?(operation.to_sym)
 

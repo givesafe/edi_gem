@@ -14,16 +14,19 @@ module CannedSource
   end
 
   # Hands back the queued answers in order, so a POST-then-GET discovery is one script.
+  # `retry_untils` are what each send was told about when its retrying stops.
   class Transport
-    attr_reader :paths
+    attr_reader :paths, :retry_untils
 
     def initialize(answers)
       @answers = Array(answers)
       @paths = []
+      @retry_untils = []
     end
 
-    def perform(path:)
+    def perform(path:, retry_until: nil)
       @paths << path
+      @retry_untils << retry_until
       raise "no canned answer left for #{path}" if @answers.empty?
 
       @answers.shift
@@ -43,9 +46,10 @@ module CannedSource
   # `archive:` defaults to nothing rather than to what the environment configures, so a machine
   # with EDI_ARCHIVE_TEMPLATE set in its shell profile does not quietly give every spec in this suite
   # a real archive writing real files.
-  def stedi_answering(*answers, archive: nil)
+  # `options` go to Stedi.new as given (payer_pauses, sleeper, clock).
+  def stedi_answering(*answers, archive: nil, **options)
     transport = Transport.new(answers)
-    [EdiGem::Source::Stedi.new(api_key: "test_key", transport: transport, archive: archive),
+    [EdiGem::Source::Stedi.new(api_key: "test_key", transport: transport, archive: archive, **options),
      transport]
   end
 

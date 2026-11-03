@@ -63,12 +63,29 @@ module EdiGem
         FIELDS.each_key { |field| instance_variable_set(:"@#{field}", fields[field]) }
       end
 
-      # Whether the checks are worth reading yet.
+      # Whether Stedi's status says nothing more follows.
       def finished? = FINISHED.include?(@state)
+
+      # Whether any check has been fully processed, so its answer is worth reading. Stedi: "Don't
+      # start polling until either the successCount or the errorCount are greater than zero".
+      def answering? = succeeded.to_i.positive? || failed.to_i.positive?
+
+      # Whether a poll can stop: Stedi: "You can stop polling when the inProgressCount reaches
+      # zero, or when the batch status is COMPLETED or COMPLETED_WITH_ERRORS". A count of zero
+      # before any check was processed says nothing yet.
+      def done? = finished? || (answering? && in_progress.to_i.zero?)
 
       # `state` as a symbol, so a caller never reads Stedi's strings: :in_progress, :completed,
       # :completed_with_errors, or :validation_failed (no payer was asked, so no answers to read).
-      def progress = PROGRESS.fetch(@state, :in_progress)
+      # A batch done by its counts before its status says so is completed, with errors when any
+      # check ended in one.
+      def progress
+        PROGRESS.fetch(@state) do
+          next :in_progress unless done?
+
+          failed.to_i.positive? ? :completed_with_errors : :completed
+        end
+      end
     end
 
     # One page of a batch's checks. A nil `next_page_token` is the only sign the listing is

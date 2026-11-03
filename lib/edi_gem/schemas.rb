@@ -45,6 +45,7 @@ EdiGem::Schema.define(:x12_271) do
   { "A" => :payer, "B" => :provider, "C" => :subscriber, "D" => :dependent }.each do |level, refused_at|
     rejection "2100#{level}/AAA", level: refused_at do
       field :code, from: "AAA03", codec: :aaa03
+      field :reason_code, from: "AAA03"
       field :followup, from: "AAA04"
     end
   end
@@ -60,6 +61,7 @@ EdiGem::Schema.define(:x12_271) do
       field :last_name, from: "NM103"
       field :first_name, from: "NM104"
       field :middle_name, from: "NM105"
+      field :suffix, from: "NM107"
       field :member_id, from: "NM109"
     end
 
@@ -96,6 +98,10 @@ EdiGem::Schema.define(:stedi) do
     field :group_number, from: "groupNumber"
     field :group_description, from: "groupDescription"
     field :state_insurance_id, from: "medicaidRecipientIdNumber"
+    # "The prior identifier number": the subscriber's REF*Q4 ("Prior Identifier Number"), the ID
+    # the member ID replaced, when the payer names it. X12 RFI 1914 puts the active ID in NM109
+    # and the inactive one in REF Q4.
+    field :prior_member_id, from: "priorIdNumber"
   end
 
   # The payer's own id for the person, used for later checks.
@@ -135,6 +141,7 @@ EdiGem::Schema.define(:stedi) do
     "dependents[]" => :dependent }.each do |lane, refused_at|
     rejection "#{lane}.aaaErrors[]", level: refused_at do
       field :code, from: "code", codec: :aaa03
+      field :reason_code, from: "code"
       field :description, from: "description"
       field :followup, from: "followupAction"
       field :resolution, from: "possibleResolutions"
@@ -148,6 +155,7 @@ EdiGem::Schema.define(:stedi) do
       field :first_name, from: "firstName"
       field :last_name, from: "lastName"
       field :middle_name, from: "middleName"
+      field :suffix, from: "suffix"
       field :date_of_birth, from: "dateOfBirth"
       field :member_id, from: "memberId"
       field :relationship_code, from: "relationToSubscriberCode"
@@ -170,6 +178,7 @@ EdiGem::Schema.define(:stedi) do
   # the lanes do not already hold is taken, and `location` ("Loop 2000A") recovers the lane.
   rejection "errors[]", level: :envelope, fallback: true do
     field :code, from: "code", codec: :aaa03
+    field :reason_code, from: "code"
     field :description, from: "description"
     field :field, from: "field"
     field :followup, from: "followupAction"
@@ -193,6 +202,8 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :state_insurance_id, from: "planInformation.medicaidRecipientIdNumber"
 
     field :member_id, from: "subscriber.memberId"
+    # The ID the plan's member ID replaced, as the eligibility schema reads it.
+    field :prior_member_id, from: "planInformation.priorIdNumber"
     field :group_number, from: "subscriber.groupNumber"
     field :payer_name, from: "payer.name"
     field :payer_code, from: "payer.payorIdentification"
@@ -220,6 +231,7 @@ EdiGem::Schema.define(:stedi_discovery) do
       field :first_name, from: "firstName"
       field :last_name, from: "lastName"
       field :middle_name, from: "middleName"
+      field :suffix, from: "suffix"
       field :date_of_birth, from: "dateOfBirth"
       field :member_id, from: "memberId"
       field :relationship_code, from: "relationToSubscriberCode"
@@ -254,6 +266,7 @@ EdiGem::Schema.define(:stedi_discovery) do
   # so a subscriber not found reads as not identified rather than as a refused request.
   rejection "errors[]", level: :envelope, fallback: true do
     field :code, from: "code", codec: :aaa03
+    field :reason_code, from: "code"
     field :description, from: "description"
     field :field, from: "field"
     field :followup, from: "followupAction"
