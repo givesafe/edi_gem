@@ -24,7 +24,7 @@ module EdiGem
     ADDRESS_FIELDS = { address_line1: :line1, address_line2: :line2, city: :city, state: :state,
                        postal_code: :postal_code }.freeze
 
-    attr_reader(*FIELDS, :role, :address, :ssn_last_four)
+    attr_reader(*FIELDS, :role, :address)
 
     # `role` is :subscriber or :dependent, the part of the answer the person came back in.
     def initialize(role:, **fields)
@@ -33,7 +33,6 @@ module EdiGem
       suffix = fields[:suffix]
       @last_name = "#{@last_name} #{suffix}" if @last_name && suffix
       @address = Address.from(**ADDRESS_FIELDS.to_h { |from, to| [to, fields[from]] })
-      @ssn_last_four = LastFour.of(fields[:ssn])
     end
 
     def dependent? = @role == :dependent
@@ -51,14 +50,9 @@ module EdiGem
       @relationship_code == SELF ? :self : :dependent
     end
 
-    # The birth date as a Date. The payer sends YYYYMMDD, and sometimes nothing or no date at all,
-    # which is nil.
-    def born_on = Codec.day(@date_of_birth.to_s.delete("-"))
-
     def concealed_inspect
       set = FIELDS.select { |field| public_send(field) }
       set << :address if @address
-      set << :ssn_last_four if @ssn_last_four
       "#<#{self.class} #{@role} #{set.join(",")}>"
     end
   end

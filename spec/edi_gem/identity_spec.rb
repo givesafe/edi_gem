@@ -70,29 +70,6 @@ RSpec.describe EdiGem::Identity do
     end
   end
 
-  describe ".another_spelling, a name with its accented letters written the other way" do
-    # Stedi: the character Đ could be transliterated to D or J. payer_normalized sends D, so this
-    # is the J, and Ü written out as UE beside the U sent.
-    it "writes each accented letter out, Đ as J" do
-      expect(["Müller", "Åsa Øberg", "Đuro", "Peña", "Smith"].map { described_class.another_spelling(_1) })
-        .to eq(["MUELLER", "AASA OEBERG", "JURO", "PENA", "SMITH"])
-    end
-
-    it "leaves nothing as nothing" do
-      expect(described_class.another_spelling(nil)).to be_nil
-    end
-  end
-
-  describe ".unpunctuated, a name as a payer holding it without punctuation would" do
-    it "removes apostrophes and reads hyphens as spaces" do
-      expect(described_class.unpunctuated("O'Brien-Smith")).to eq("OBRIEN SMITH")
-    end
-
-    it "leaves nothing as nothing" do
-      expect(described_class.unpunctuated(nil)).to be_nil
-    end
-  end
-
   describe ".db_normalized, a name as it says who someone is" do
     it "doesn't count accents, case, spaces, hyphens or apostrophes" do
       names = ["José García-López", "jose garcia lopez", " JOSE  GARCIALOPEZ "]

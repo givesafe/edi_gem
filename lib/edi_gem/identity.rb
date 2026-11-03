@@ -18,7 +18,7 @@ module EdiGem
     TITLE = ->(word) { TITLES.include?(bare(word)) }
 
     # The shortest name a payer is taken to have cut short. Below it, a prefix is too likely to be
-    # another name (LEO is the start of LEONARD). The mock source cuts first names to it.
+    # another name (LEO is the start of LEONARD).
     TRUNCATED_AT = 8
 
     # The fields that say who a person is.
@@ -28,11 +28,6 @@ module EdiGem
     LETTERS = { "ß" => "SS", "Æ" => "AE", "æ" => "AE", "Œ" => "OE", "œ" => "OE", "Ø" => "O",
                 "ø" => "O", "Ł" => "L", "ł" => "L", "Đ" => "D", "đ" => "D", "Þ" => "TH",
                 "þ" => "TH" }.freeze
-    # The other way an accented letter is written, beside the one payer_normalized sends (its accent
-    # dropped, or LETTERS): Ü written out as UE, Đ as J. Stedi sends a letter one way and the payer's
-    # record may hold the other, so a name refused as sent may be held this way.
-    ANOTHER_SPELLING = { "Ä" => "AE", "ä" => "ae", "Ö" => "OE", "ö" => "oe", "Ü" => "UE", "ü" => "ue",
-                         "Å" => "AA", "å" => "aa", "Ø" => "OE", "ø" => "oe", "Đ" => "J", "đ" => "j" }.freeze
     MARKS = /\p{Mn}/
     LETTER = Regexp.union(LETTERS.keys)
 
@@ -69,22 +64,6 @@ module EdiGem
     # A last name's suffix (JR, SR, I, II, III, IV, V), or nil when it has none.
     def suffix(name)
       payer_sent_last_name(name).last
-    end
-
-    # A name with each accented letter written the other way (ANOTHER_SPELLING), as payer_normalized
-    # sends it otherwise: Müller is MUELLER, Đuro is JURO. nil stays nil.
-    def another_spelling(name)
-      return nil if name.nil?
-
-      payer_normalized(name.to_s.unicode_normalize(:nfc).gsub(Regexp.union(ANOTHER_SPELLING.keys), ANOTHER_SPELLING))
-    end
-
-    # A name without its punctuation, as a payer that holds it unpunctuated would: payer_normalized,
-    # apostrophes removed and hyphens as spaces (O'BRIEN-SMITH is OBRIEN SMITH).
-    def unpunctuated(name)
-      return nil if name.nil?
-
-      payer_normalized(name).delete("'").tr("-", " ").squeeze(" ").strip
     end
 
     # The words of a name, for comparing: payer_normalized, with every other character a space.

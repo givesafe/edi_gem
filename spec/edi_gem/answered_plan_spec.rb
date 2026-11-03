@@ -21,15 +21,8 @@ RSpec.describe EdiGem::AnsweredPlan do
         .to eq(["P1", "MOCKID0002", "MEDID0001", "EXAMPLE PLAN", "PLAN01", "GRP01"])
     end
 
-    it "names the ID the member ID replaced, as the payer sent it, and none WHEN it names none" do
-      replaced = answer(benefits: [EdiGem::Benefit.new(status: :active, member_id: "MOCKID0002",
-                                                       prior_member_id: "MOCKID0001")], people: [person])
-
-      expect([replaced.prior_member_id, plan.prior_member_id]).to eq(["MOCKID0001", nil])
-    end
-
     it "says the plan is active on the day" do
-      expect(plan.status_on(day)).to eq :active
+      expect(plan.coverage_on(day).status).to eq :active
     end
 
     it "names the person as the policyholder" do
@@ -45,19 +38,20 @@ RSpec.describe EdiGem::AnsweredPlan do
     end
 
     it "is inactive WHEN the plan's line says so" do
-      expect(answer(benefits: [EdiGem::Benefit.new(status: :inactive)], people: [person]).status_on(day))
+      expect(answer(benefits: [EdiGem::Benefit.new(status: :inactive)], people: [person]).coverage_on(day).status)
         .to eq :inactive
     end
 
-    it "is unknown WHEN no line on the plan says active or inactive, never inactive" do
-      expect(answer(benefits: [EdiGem::Benefit.new(benefit_type: :co_payment)], people: [person]).status_on(day))
-        .to eq :unknown
+    it "says nothing WHEN no line on the plan says active or inactive, never inactive" do
+      plan = answer(benefits: [EdiGem::Benefit.new(benefit_type: :co_payment)], people: [person])
+
+      expect(plan.coverage_on(day).status).to be_nil
     end
 
-    it "has no lines, no fields and an unknown status WHEN the payer sent no benefits" do
+    it "has no lines, no fields and no status WHEN the payer sent no benefits" do
       plan = answer(benefits: [], people: [person])
 
-      expect([plan.lines, plan.status_on(day), *fields(plan)]).to eq([[], :unknown] + ([nil] * 6))
+      expect([plan.lines, plan.coverage_on(day).status, *fields(plan)]).to eq([[]] + ([nil] * 7))
     end
 
     it "gives the plan's own dates as Dates" do
@@ -108,7 +102,7 @@ RSpec.describe EdiGem::AnsweredPlan do
     it "is the dependent WHEN the caller read the answer as about one, the plan's status its own" do
       plan = answer(benefits: benefits, people: [person], answered_as: :dependent)
 
-      expect([plan.relationship, plan.status_on(day)]).to eq(%i[dependent active])
+      expect([plan.relationship, plan.coverage_on(day).status]).to eq(%i[dependent active])
     end
 
     it "has no relationship WHEN the caller read nobody" do

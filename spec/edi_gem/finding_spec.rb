@@ -88,18 +88,16 @@ RSpec.describe EdiGem::Finding do
     end
   end
 
-  # A caller that records one word reads inactive? and line_code beside the name.
+  # A caller that records one word reads inactive? beside the name.
   describe "a check's line" do
-    it "is inactive WHEN the line says inactive, with its code" do
-      finding = checked(benefits: [line(:inactive, "6")])
-
-      expect([finding.inactive?, finding.line_code]).to eq [true, "6"]
+    it "is inactive WHEN the line says inactive" do
+      expect(checked(benefits: [line(:inactive, "6")])).to be_inactive
     end
 
     it "is inactive WHEN the plan's dates ended before the day, whatever the line's code says" do
       ended = EdiGem::Benefit.new(status: :active, status_code: "1", service_types: ["30"], ends_on: "20260430")
 
-      expect(checked(benefits: [ended])).to have_attributes(name: :not_covered, inactive?: true, line_code: nil)
+      expect(checked(benefits: [ended])).to have_attributes(name: :not_covered, inactive?: true)
     end
 
     it "is not inactive WHEN the line says not covered (I)" do
@@ -109,19 +107,17 @@ RSpec.describe EdiGem::Finding do
     it "is none WHEN the state decided, though status lines came with it" do
       finding = checked(benefits: [line(:inactive, "6")], rejections: [refusal(:subscriber, :member_id_invalid)])
 
-      expect([finding.name, finding.inactive?, finding.line_code]).to eq [:not_on_this_id, false, nil]
+      expect([finding.name, finding.inactive?]).to eq [:not_on_this_id, false]
     end
 
     it "is none WHEN the answer is about someone else" do
-      finding = checked(benefits: [line(:inactive, "6")], mismatched: true)
-
-      expect([finding.inactive?, finding.line_code]).to eq [false, nil]
+      expect(checked(benefits: [line(:inactive, "6")], mismatched: true)).to_not be_inactive
     end
 
     it "is none WHEN the payer is silent, though it named a code" do
       finding = checked(rejections: [refusal(:payer, :payer_unavailable)])
 
-      expect([finding.code, finding.line_code]).to eq [:payer_unavailable, nil]
+      expect([finding.code, finding.inactive?]).to eq [:payer_unavailable, false]
     end
   end
 

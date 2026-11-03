@@ -121,7 +121,7 @@ RSpec.describe EdiGem::Response do
     end
   end
 
-  describe "#payer_unavailable? and #ask_again?" do
+  describe "#ask_again?" do
     def payer_down(followup)
       EdiGem::Rejection.new(level: :payer, code: :payer_unavailable, reason_code: "42",
                             followup: followup)
@@ -130,15 +130,14 @@ RSpec.describe EdiGem::Response do
     it "says the payer can't answer right now, and to ask again, WHEN the payer lane says 42 with no bar" do
       response = described_class.new(rejections: [payer_down(nil)])
 
-      expect([response.payer_unavailable?, response.ask_again?]).to eq([true, true])
+      expect([response.state, response.ask_again?]).to eq([:payer_silent, true])
     end
 
     # Stedi: a 42 with C, N or S is a problem with the request, for Stedi support.
     it "says the payer refused the request as sent, not that it is down, WHEN the 42's follow-up is N" do
       response = described_class.new(rejections: [payer_down("Resubmission Not Allowed")])
 
-      expect([response.payer_unavailable?, response.ask_again?, response.resubmission_refused?])
-        .to eq([false, false, true])
+      expect([response.ask_again?, response.resubmission_refused?]).to eq([false, true])
     end
 
     it "says the payer is down, not that it refused the request, WHEN the 42 has no bar" do
@@ -154,13 +153,13 @@ RSpec.describe EdiGem::Response do
     it "says the payer couldn't be reached, and not to ask again, WHEN the payer lane says 79 alone" do
       response = described_class.new(rejections: [rejection(:payer, :invalid_participant)])
 
-      expect([response.payer_unavailable?, response.ask_again?]).to eq([true, false])
+      expect([response.state, response.ask_again?]).to eq([:payer_silent, false])
     end
 
     it "says to ask again WHEN a 42 Stedi would ask again comes beside a 79" do
       response = described_class.new(rejections: [rejection(:payer, :invalid_participant), payer_down(nil)])
 
-      expect([response.payer_unavailable?, response.ask_again?]).to eq([true, true])
+      expect(response.ask_again?).to be(true)
     end
 
     it "says to ask again WHEN the payer lane says 80, whatever its follow-up" do
@@ -168,7 +167,7 @@ RSpec.describe EdiGem::Response do
                                      followup: "Resubmission Not Allowed")
       response = described_class.new(rejections: [eighty])
 
-      expect([response.payer_unavailable?, response.ask_again?]).to eq([true, true])
+      expect(response.ask_again?).to be(true)
     end
 
     # Stedi's eligibility troubleshooting page lists 79 in its provider table as "a problem
@@ -176,24 +175,23 @@ RSpec.describe EdiGem::Response do
     it "says the payer couldn't be reached, and our standing not connected, WHEN the provider lane says 79" do
       response = described_class.new(rejections: [rejection(:provider, :invalid_participant)])
 
-      expect([response.payer_unavailable?, response.ask_again?, response.provider_standing, response.state])
-        .to eq([true, false, :not_connected, :payer_silent])
+      expect([response.ask_again?, response.provider_standing, response.state])
+        .to eq([false, :not_connected, :payer_silent])
     end
 
     it "says to ask again WHEN the provider lane says 42 with no bar" do
       down = EdiGem::Rejection.new(level: :provider, code: :payer_unavailable, reason_code: "42")
       response = described_class.new(rejections: [down])
 
-      expect([response.payer_unavailable?, response.ask_again?, response.provider_standing])
-        .to eq([true, true, nil])
+      expect([response.ask_again?, response.provider_standing]).to eq([true, nil])
     end
 
     it "says the request was refused as sent WHEN the provider lane says 42 with follow-up C" do
       refused = EdiGem::Rejection.new(level: :provider, code: :payer_unavailable, reason_code: "42", followup: "C")
       response = described_class.new(rejections: [refused])
 
-      expect([response.resubmission_refused?, response.payer_unavailable?, response.ask_again?,
-              response.deciding_rejection]).to eq([true, false, false, refused])
+      expect([response.resubmission_refused?, response.ask_again?, response.deciding_rejection])
+        .to eq([true, false, refused])
     end
 
     it "says our provider was refused WHEN the provider lane says 43 or 41" do
@@ -201,8 +199,8 @@ RSpec.describe EdiGem::Response do
         described_class.new(rejections: [rejection(:provider, code)])
       end
 
-      expect(responses.map { |response| [response.provider_standing, response.payer_unavailable?, response.state] })
-        .to eq([[:refused, false, :rejected]] * 2)
+      expect(responses.map { |response| [response.provider_standing, response.state] })
+        .to eq([%i[refused rejected]] * 2)
     end
 
     # Stedi's subscriber and dependent tables give 42 the payer table's resolution: "The payer can't
@@ -213,8 +211,8 @@ RSpec.describe EdiGem::Response do
         described_class.new(benefits: [benefit(:active)], rejections: [down])
       end
 
-      expect(responses.map { |response| [response.payer_unavailable?, response.ask_again?, response.state] })
-        .to eq([[true, true, :payer_silent]] * 2)
+      expect(responses.map { |response| [response.ask_again?, response.state] })
+        .to eq([[true, :payer_silent]] * 2)
     end
 
     it "says the request was refused as sent, and not to ask again, WHEN the person's lane says 42 with follow-up S" do
@@ -225,13 +223,12 @@ RSpec.describe EdiGem::Response do
         .to eq([true, false, refused])
     end
 
-    it "says neither WHEN the refusal is another, or in another lane" do
+    it "says not to WHEN the refusal is another, or in another lane" do
       responses = [described_class.new(rejections: [rejection(:subscriber, :subscriber_not_found)]),
                    described_class.new(rejections: [rejection(:subscriber, :invalid_participant)]),
                    described_class.new]
 
-      expect(responses.map { |response| [response.payer_unavailable?, response.ask_again?] })
-        .to eq([[false, false]] * 3)
+      expect(responses.map(&:ask_again?)).to eq([false] * 3)
     end
   end
 
@@ -346,23 +343,6 @@ RSpec.describe EdiGem::Response do
 
     it "is not a payer that is down" do
       expect(described_class.new(rejections: [rejection(:payer, :payer_unavailable)])).to_not be_our_setup_refused
-    end
-  end
-
-  describe "#error_code" do
-    it "is the deciding refusal's code, not the first one listed" do
-      response = described_class.new(rejections: [rejection(:subscriber, :gender_missing),
-                                                  rejection(:subscriber, :required_data_missing)])
-
-      expect(response.error_code).to eq("required_data_missing")
-    end
-
-    it "is nil when nothing was refused" do
-      expect(described_class.new.error_code).to be_nil
-    end
-
-    it "is a code the codec did not name as its raw string" do
-      expect(described_class.new(rejections: [rejection(:payer, "99")]).error_code).to eq("99")
     end
   end
 

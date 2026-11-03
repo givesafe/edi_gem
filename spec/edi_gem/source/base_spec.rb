@@ -49,11 +49,6 @@ RSpec.describe EdiGem::Source::Base do
     expect { port.resolve("handle") }.to raise_error(EdiGem::FeatureNotSupported, /discovery/)
   end
 
-  it "refuses to read an archived discovery" do
-    expect { port.archived("file:///kept.json", kind: :discovery) }
-      .to raise_error(EdiGem::FeatureNotSupported, /discovery/)
-  end
-
   it "refuses a batch" do
     expect { port.submit_batch([inquiry], name: "run") }
       .to raise_error(EdiGem::FeatureNotSupported, /batch/)

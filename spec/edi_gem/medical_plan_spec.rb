@@ -59,26 +59,26 @@ RSpec.describe EdiGem::MedicalPlan do
       .to eq(["P1", "MOCKID0002", "EXAMPLE PLAN", "PLAN01"])
   end
 
-  describe "#status_on" do
+  describe "#coverage_on" do
     def status_of(**fields)
       found.replace([found_plan([line.merge(fields)], held)])
-      plan.status_on(as_of)
+      plan.coverage_on(as_of).status
     end
 
     it "is active WHEN there is an active line" do
-      expect(plan.status_on(as_of)).to eq :active
+      expect(plan.coverage_on(as_of).status).to eq :active
     end
 
     it "is inactive WHEN the only line is inactive" do
       expect(status_of(status: :inactive)).to eq :inactive
     end
 
-    it "is unknown WHEN no line says active or inactive, never inactive" do
-      expect(status_of(status: nil, benefit_type: :co_payment)).to eq :unknown
+    it "says nothing WHEN no line says active or inactive, never inactive" do
+      expect(status_of(status: nil, benefit_type: :co_payment)).to be_nil
     end
 
-    it "is unknown WHEN the payer says only that the plan is not covered: not a denial of coverage" do
-      expect(status_of(status: :non_covered)).to eq :unknown
+    it "is non_covered WHEN the payer says only that the plan is not covered: not a denial of coverage" do
+      expect(status_of(status: :non_covered)).to eq :non_covered
     end
 
     it "is inactive WHEN the plan ended before the day asked about, though a line says active" do
@@ -97,8 +97,8 @@ RSpec.describe EdiGem::MedicalPlan do
       expect(status_of(ends_on: "garbled")).to eq :active
     end
 
-    it "is unknown WHEN only another service type is active: nothing was said about the plan" do
-      expect(status_of(service_types: ["33"])).to eq :unknown
+    it "says nothing WHEN only another service type is active: nothing was said about the plan" do
+      expect(status_of(service_types: ["33"])).to be_nil
     end
 
     it "is active WHEN the plan carries a term on 30 and no status line, since the term implies coverage" do
@@ -176,8 +176,8 @@ RSpec.describe EdiGem::MedicalPlan do
 
   describe "who the payer matched" do
     it "is the person as the payer holds them" do
-      expect([plan.person.first_name, plan.person.last_name, plan.person.born_on])
-        .to eq(["TESTFIRST", "TESTLAST", Date.new(1980, 1, 1)])
+      expect([plan.person.first_name, plan.person.last_name, plan.person.date_of_birth])
+        .to eq(%w[TESTFIRST TESTLAST 19800101])
     end
 
     context "WHEN the payer named nobody" do
@@ -251,21 +251,6 @@ RSpec.describe EdiGem::MedicalPlan do
     end
   end
 
-  describe "the SSN the payer holds" do
-    let(:held) { { first_name: "TESTFIRST", last_name: "TESTLAST", date_of_birth: "19800101", ssn: "XXX-XX-1234" } }
-
-    [false, true].each do |revealed|
-      it "prints no digit of it, the plan or its person, WHEN EdiGem.reveal is #{revealed}" do
-        EdiGem.reveal = revealed
-
-        expect([plan.inspect, PP.pp(plan, +""), plan.person.inspect, PP.pp(plan.person, +"")].join)
-          .to_not include("1234")
-      ensure
-        EdiGem.reveal = false
-      end
-    end
-  end
-
   describe "the plan's own dates" do
     def dates(**fields)
       found.replace([found_plan([line.merge(fields)], held)])
@@ -304,7 +289,7 @@ RSpec.describe EdiGem::MedicalPlan do
   describe "the status code behind the status" do
     def finding(**fields)
       found.replace([found_plan([line.merge(fields)], held)])
-      [plan.status_on(as_of), plan.coverage_on(as_of).code]
+      [plan.coverage_on(as_of).status, plan.coverage_on(as_of).code]
     end
 
     it "is the active line's, code 5 included" do

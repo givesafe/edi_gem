@@ -67,7 +67,7 @@ RSpec.describe EdiGem::Source::Mock do
       inquiry = EdiGem::Inquiry::Eligibility.new(payer_code: "11111", provider: provider,
                                                  subscriber: subscriber("Active", member_id: "MOCKID0001"))
 
-      expect([mock.eligibility(inquiry).payer_unavailable?, down.paths.size]).to eq([true, 1])
+      expect([mock.eligibility(inquiry).state, down.paths.size]).to eq([:payer_silent, 1])
       expect(Kernel).to_not have_received(:sleep)
     end
 
@@ -169,8 +169,8 @@ RSpec.describe EdiGem::Source::Mock do
     it "is a payer that is down, worth asking again, for the NoAnswer last name" do
       response = discovery("NoAnswer")
 
-      expect([response.payer_unavailable?, response.ask_again?, response.resubmission_refused?])
-        .to eq([true, true, false])
+      expect([response.state, response.ask_again?, response.resubmission_refused?])
+        .to eq([:payer_silent, true, false])
     end
 
     it "does not identify the person for the NotFound last name" do
@@ -262,15 +262,15 @@ RSpec.describe EdiGem::Source::Mock do
     it "reads Aaa79 in the provider lane as a payer it couldn't reach, not connected, not a refusal of our provider" do
       response = discovery("Aaa79")
 
-      expect([response.payer_unavailable?, response.ask_again?, response.provider_standing])
-        .to eq([true, false, :not_connected])
+      expect([response.state, response.ask_again?, response.provider_standing])
+        .to eq([:payer_silent, false, :not_connected])
     end
 
     it "reads Aaa42 in the subscriber lane as a payer that can't answer right now, to ask again" do
       response = discovery("Aaa42")
 
-      expect([response.rejections.first.location, response.payer_unavailable?, response.ask_again?])
-        .to eq(["Loop 2100C", true, true])
+      expect([response.rejections.first.location, response.state, response.ask_again?])
+        .to eq(["Loop 2100C", :payer_silent, true])
     end
 
     it "reads AaaT4 in the provider lane as our setup refused, not a refusal of our provider" do

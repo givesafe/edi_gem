@@ -83,20 +83,9 @@ module EdiGem
     # payer can list a refusal that decides nothing ahead of the one that does. nil with none.
     def deciding_rejection = read_state.deciding_rejection
 
-    # The deciding refusal's reason, to record beside an answer that isn't one; nil when none. A
-    # code the codec did not name is its raw string.
-    def error_code = deciding_rejection&.code&.to_s
-
-    # The deciding refusal in codes alone (Rejection#summary), to record beside error_code; nil when
-    # none.
+    # The deciding refusal in codes alone (Rejection#summary), to record beside an answer that isn't
+    # one; nil when none.
     def error_summary = deciding_rejection&.summary
-
-    # The payer couldn't be reached (Rejection#payer_unreached?): it can't answer right now (an AAA
-    # 42 Stedi says to ask again, or an 80), or Stedi had a problem connecting to it (79). Not a 42
-    # whose follow-up is C, N or S (#resubmission_refused?). Read among #payer_rejections, so a 79,
-    # 42 or 80 in the provider's lane, or a 42 or 80 in the person's, counts as it does in the
-    # payer's.
-    def payer_unavailable? = payer_rejections.any?(&:payer_unreached?)
 
     # The payer refused the request as sent: a 42 whose follow-up is C, N or S, which Stedi says is
     # a problem with the request, for Stedi support (Rejection#resubmission_refused?).

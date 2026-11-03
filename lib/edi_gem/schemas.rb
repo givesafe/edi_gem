@@ -98,10 +98,6 @@ EdiGem::Schema.define(:stedi) do
     field :group_number, from: "groupNumber"
     field :group_description, from: "groupDescription"
     field :state_insurance_id, from: "medicaidRecipientIdNumber"
-    # "The prior identifier number": the subscriber's REF*Q4 ("Prior Identifier Number"), the ID
-    # the member ID replaced, when the payer names it. X12 RFI 1914 puts the active ID in NM109
-    # and the inactive one in REF Q4.
-    field :prior_member_id, from: "priorIdNumber"
   end
 
   # The payer's own id for the person, used for later checks.
@@ -202,8 +198,6 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :state_insurance_id, from: "planInformation.medicaidRecipientIdNumber"
 
     field :member_id, from: "subscriber.memberId"
-    # The ID the plan's member ID replaced, as the eligibility schema reads it.
-    field :prior_member_id, from: "planInformation.priorIdNumber"
     field :group_number, from: "subscriber.groupNumber"
     field :payer_name, from: "payer.name"
     field :payer_code, from: "payer.payorIdentification"
@@ -237,8 +231,6 @@ EdiGem::Schema.define(:stedi_discovery) do
       field :relationship_code, from: "relationToSubscriberCode"
       field :maintenance_type_code, from: "maintenanceTypeCode"
       field :maintenance_reason_code, from: "maintenanceReasonCode"
-      # Payers fill it whole, masked (XXX-XX-1234) or not at all; Person keeps the last four only.
-      field :ssn, from: "ssn"
       field :address_line1, from: "address.address1"
       field :address_line2, from: "address.address2"
       field :city, from: "address.city"

@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-### Proposed (in the working tree, not yet reviewed by Danny)
+### Proposed (not yet reviewed by Danny)
 
 The caller contract for each is in the README's "V1 reference".
 
@@ -32,9 +32,6 @@ The caller contract for each is in the README's "V1 reference".
 - A discovery's results are polled under their own operation, `discovery_results` (same path and
   timeout), so a timed-out poll is still retried and the polls pace apart from the sends, as
   Stedi limits the two endpoints apart. The mock answers both.
-- `AnsweredPlan#prior_member_id`: the ID the member ID replaced, when the payer names it (X12
-  REF Q4 "Prior Identifier Number", Stedi's `planInformation.priorIdNumber`), on a check's plan
-  and a discovery's, or nil. The X12 schema doesn't read it yet.
 - `batch_checks` and `batch_results` take `only:` (identifiers): the items sent under those alone are
   read and filed, so a caller polling a batch files only the answers it hasn't taken yet.
 - `Batch::Status#answering?` and `#done?`: when a batch's results are worth reading (a success or
@@ -42,9 +39,8 @@ The caller contract for each is in the README's "V1 reference".
   processed, or a finished status), as Stedi's batch refresh guide says. `#progress` reads a batch
   done by its counts before its status caught up as completed, with errors when any check ended in one.
 - `Response#deciding_rejection`: the refusal that decided the state, read in the state's own order,
-  not the first one listed. `#error_code` now reads it, so a refusal listed ahead that decides
-  nothing no longer hides the one that does. `#error_summary` and `Rejection#summary` say it in
-  codes alone ("AAA 62 at subscriber, follow-up C"), never Stedi's free text.
+  not the first one listed, so a refusal listed ahead that decides nothing no longer hides the one
+  that does. `#error_summary` and `Rejection#summary` say it in codes alone ("AAA 62 at subscriber, follow-up C"), never Stedi's free text.
 - `Response#our_setup_refused?` and `Rejection#our_setup_refused?`: a 41 or a T4 in the payer lane,
   which Stedi reads as our NPI, credentials or the payer ID we sent. The state stays `payer_silent`.
 - AAA 60 reads as `birth_date_after_day_asked`, no longer `date_out_of_range` (kept for 62 and 63).
@@ -63,22 +59,18 @@ The caller contract for each is in the README's "V1 reference".
 - Names sent as Stedi asks: a suffix (JR, SR, I, II, III, IV, V, with or without a period)
   goes in the request's `suffix` (X12 NM107), for the subscriber and dependents, not the last name;
   titles aren't sent; `~ * : ^ >` are removed from every name. `Identity::SUFFIXES` is split into
-  `SUFFIXES` and `TITLES`. New `Identity.payer_sent`, `.payer_sent_last_name`, `.suffix`,
-  `.another_spelling` and `.unpunctuated`; `Person::Asked#another_spelling?`, `#another_spelling`,
-  `#punctuated?` and `#unpunctuated`, for a second question asked with the names spelled the
-  other way (MUELLER for Müller) or written without punctuation.
+  `SUFFIXES` and `TITLES`. New `Identity.payer_sent`, `.payer_sent_last_name` and `.suffix`.
 - A suffix the payer sends apart (Stedi's `suffix`, X12 NM107) is read into `Person#last_name`.
   The mock echoes the suffix it was sent.
 
 - `Response#provider_standing`: `:refused`, `:accepted` or nil, what an answer says of our
   provider's standing with the payer, so a caller never reads the refusals and the state for it.
-- `Response#checked_plan`, `#medical_plans(asked:)` and `#error_code`;
+- `Response#checked_plan(identification:)` and `#medical_plans`;
   `EdiGem::CheckedPlan` and `EdiGem::MedicalPlan` (both `EdiGem::AnsweredPlan`). A caller reads a
   check or a discovery in coverage terms and never reads a benefit line's codes itself.
 - `EdiGem::Verdict`, `CheckedPlan#verdict` and `#verdict_code`, `Response#discovery_verdict` and
   `#reading` are removed: `Finding` holds the same meaning, and a caller derives its one word from
-  it. `Finding#inactive?` and `#line_code` keep what the verdict kept apart (a plan that ended,
-  and the deciding line's code). `Finding.of_search` reads a discovery that found no plan; which
+  it. `Finding#inactive?` keeps what the verdict kept apart (a plan that ended). `Finding.of_search` reads a discovery that found no plan; which
   found plans decide a discovery is the caller's, so the gem has no discovery fold.
 - `PersonRefusal::FINDINGS`: what each refusal in the person's lanes says the answer found, read by
   `Response::State` and `Finding` alike. Beyond the identity codes, `78` (not in this group or plan)
@@ -88,25 +80,17 @@ The caller contract for each is in the README's "V1 reference".
 - `MedicalPlan#payer_id`: Stedi's payer ID for a plan's payer code, from Stedi's payer
   directory (`Source::Base#payers`, `#payer_id_for`; `EdiGem::ListedPayer`). One search per code
   for the source's lifetime; not billed.
-- `Source::Base#archived` (the common name for `archived_discovery`) and `#archived_question`,
-  which reads a kept discovery request back as an `Inquiry::Question` (`Person::Asked` and the day
-  asked about). `Inquiry::Discovery#question` builds the same from an inquiry.
-- `Identification#match`, `#mismatched?`, `#fields`, `#reason` and `#answered_as`, with the
-  payer's refusal of the person (`EdiGem::PersonRefusal`) winning over our comparison.
-- `Identification#moved?`, reviewed with `Response#identify`, is removed: no caller reads it.
-  `#answered_as` says which part of the answer the person came back in.
-- `Identification#given_fields`, `Address#compare` and `EdiGem::LastFour`: a given address and
-  the last four of an SSN are compared with what the payer holds, and never change the match.
-  `Person#ssn_last_four`, `#relationship` and `#born_on`. `Identification` is its own constant.
+- Who an answer is about is the caller's reading: `checked_plan(identification:)` and
+  `Finding.of_check` take any object answering `mismatched?`, `answered_as` and `match`, and
+  the gem has no `Identification` or `Address#compare`. `Person#relationship`.
 - `Inquiry#idempotency_key` and `#fingerprint` (`EdiGem::RequestKey`): keys made from what a
   question asks, so the details themselves are never stored.
 - `Coverage.context(code)`: what EB01 5, 7 and 8 say beyond the status.
 - `Batch::Status#progress`, `Batch::Check#completed?`, `Error#code` and `Fault#code`.
 - `Source::Stedi#eligibility` asks again a payer that can't answer right now, as Stedi says:
   at once and for up to two minutes, unless a 42's follow-up is C, N or S (`AskingAgain`;
-  `payer_pauses:`, `sleeper:` and `clock:` on `Stedi.new`). `Response#payer_unavailable?` (a 42
-  Stedi would ask again, an 80 or a 79 in the payer's lane; `Rejection#payer_unreached?`),
-  `#resubmission_refused?` (a 42 with C, N or S, which Stedi reads as a problem with the request,
+  `payer_pauses:`, `sleeper:` and `clock:` on `Stedi.new`). `Rejection#payer_unreached?` (a 42
+  Stedi would ask again, an 80 or a 79), `Response#resubmission_refused?` (a 42 with C, N or S, which Stedi reads as a problem with the request,
   not a payer that is down; `Rejection#resubmission_refused?`) and `#ask_again?`;
   `Rejection#reason_code`. `Rejection#retryable?` follows Stedi's rule, and
   `#recognised?`, `RETRYABLE_REASONS` and `RETRYABLE_FOLLOWUPS` are removed. The eligibility
@@ -130,17 +114,10 @@ The caller contract for each is in the README's "V1 reference".
   `Net::HTTPHeaderSyntaxError`, with the message "answered with no readable HTTP"). Any other
   exception from the HTTP client, such as a `TypeError` or `ArgumentError`, was wrapped as
   `ArchiveFailed` and is now raised as itself, so a defect does not read as a missing body.
-- A second behavior changes: `Archive#fetch` (and so `archived`, `archived_discovery` and
-  `archived_question`) raises `ArchiveFailed`, not retryable, in place of `ArgumentError` for a uri
+- A second behavior changes: `Archive#fetch` (and so `archived_discovery`) raises `ArchiveFailed`, not retryable, in place of `ArgumentError` for a uri
   (nil included) the archive did not make: an object in another bucket, or a uri that is not a
   local archive's. The messages are the same and nothing is sent. The uri is stored data, not a
   defect in the call.
-- `Stedi#archived_eligibility(response_uri)`: a kept eligibility answer, a real-time check's or a
-  batch item's, read into a `Response` again as it was recorded, without calling Stedi; nothing is
-  billed or kept again. Its exchange is the archive's read (`get`, 200, no headers). It raises as
-  `archived_discovery` does. `Source::Base#archived` now takes `kind:` (`:eligibility` or
-  `:discovery`, no default; any other raises `ArgumentError`), where it read discovery alone.
-
 ### Reviewed
 
 - Names are sent in capitals without accents (`Identity.plain`), in Stedi bodies and in a 270.

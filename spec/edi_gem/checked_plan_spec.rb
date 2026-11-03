@@ -31,7 +31,7 @@ RSpec.describe EdiGem::CheckedPlan do
                                             plan_number: "PLAN01"),
                         EdiGem::Benefit.new(benefit_type: :deductible, plan_name: "SECOND PLAN")])
 
-      expect([plan.plan_name, plan.plan_number, plan.status_on(day)]).to eq(["TERM PLAN", "PLAN01", :active])
+      expect([plan.plan_name, plan.plan_number, plan.coverage_on(day).status]).to eq(["TERM PLAN", "PLAN01", :active])
     end
 
     it "is nil WHEN the answer names no plan, so a caller can keep what it held" do
@@ -75,17 +75,17 @@ RSpec.describe EdiGem::CheckedPlan do
     end
   end
 
-  describe "#status_on" do
+  describe "#coverage_on" do
     it "is the plan's own lines on the day" do
       benefits.replace([EdiGem::Benefit.new(status: :inactive)])
 
-      expect(plan.status_on(day)).to eq :inactive
+      expect(plan.coverage_on(day).status).to eq :inactive
     end
 
-    it "is unknown WHEN the payer says only that the plan is not covered" do
+    it "is non_covered WHEN the payer says only that the plan is not covered" do
       benefits.replace([EdiGem::Benefit.new(status: :non_covered)])
 
-      expect(plan.status_on(day)).to eq :unknown
+      expect(plan.coverage_on(day).status).to eq :non_covered
     end
   end
 

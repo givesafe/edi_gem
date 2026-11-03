@@ -163,30 +163,6 @@ RSpec.describe EdiGem::Reading do
     end
   end
 
-  # Stedi's planInformation.priorIdNumber, "The prior identifier number": X12's REF*Q4, the ID the
-  # member ID replaced.
-  describe "the ID the payer's member ID replaced" do
-    def prior(plan_information, schema:)
-      body = { "subscriber" => { "memberId" => "MEM2" }, "planInformation" => plan_information,
-               "benefitsInformation" => [{ "code" => "1" }] }
-      body = { "items" => [body] } if schema == :stedi_discovery
-      described_class.new(document: EdiGem::Document::Json.new(body),
-                          schema: EdiGem::Schema.fetch(schema)).benefits.map { |line| line[:prior_member_id] }
-    end
-
-    %i[stedi stedi_discovery].each do |schema|
-      context "WHEN read with #{schema}" do
-        it "reads the prior identifier number onto each line, beside the member ID" do
-          expect(prior({ "priorIdNumber" => "MEM1" }, schema: schema)).to eq(["MEM1"])
-        end
-
-        it "reads none WHEN the payer names no prior ID" do
-          expect(prior({ "groupNumber" => "GRP01" }, schema: schema)).to eq([nil])
-        end
-      end
-    end
-  end
-
   # One key holds a single date on one coverage and a range on the next, and the begin and end a
   # payer sends of their own win over either.
   describe "a plan's dates" do

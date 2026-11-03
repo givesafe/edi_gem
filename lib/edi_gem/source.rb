@@ -73,12 +73,6 @@ module EdiGem
         unsupported(:discovery)
       end
 
-      # An answer the archive kept (a Stored's response_uri), read again into a Response by its
-      # `kind` (:eligibility or :discovery) without sending anything.
-      def archived(_response_uri, kind:)
-        unsupported(kind)
-      end
-
       # Submits many eligibility checks as one batch. `inquiries` is a Hash of the caller's
       # identifier => Inquiry::Eligibility; an Array is keyed by position. Returns a
       # Batch::Submission.

@@ -21,7 +21,7 @@ module EdiGem
   # Which refusal codes mean which is PersonRefusal::FINDINGS.
   #   pending           an asynchronous answer that hasn't arrived
   #
-  # A finding a plan's own line decided keeps that line (#line_code, #inactive?), so a caller that
+  # A finding a plan's own line decided keeps that line (#inactive?), so a caller that
   # records one word can tell a plan that ended from one never covered.
   class Finding
     NAMES = %i[covered not_covered someone_else held_differently not_on_this_id provider_refused
@@ -105,10 +105,6 @@ module EdiGem
     # plan's dates): not covered as one who was and no longer is, rather than never covered (I) or no
     # lines at all.
     def inactive? = @line&.inactive? || false
-
-    # The EB01 status code of the line that decided, to record beside the finding; nil when no line
-    # did (the state, a refusal or the person decided), or the plan's dates or an implied term did.
-    def line_code = @line&.code
 
     def to_s = @name.to_s
 

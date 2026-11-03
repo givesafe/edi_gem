@@ -45,22 +45,6 @@ RSpec.describe EdiGem::Person do
     end
   end
 
-  describe "#born_on" do
-    def born_on(date_of_birth) = described_class.new(role: :subscriber, date_of_birth: date_of_birth).born_on
-
-    it "reads the payer's YYYYMMDD as a Date" do
-      expect(born_on("19800102")).to eq(Date.new(1980, 1, 2))
-    end
-
-    it "reads a dashed date too" do
-      expect(born_on("1980-01-02")).to eq(Date.new(1980, 1, 2))
-    end
-
-    it "is nil WHEN the payer sent no date, or none it can read" do
-      expect([born_on(nil), born_on("garbled")]).to eq([nil, nil])
-    end
-  end
-
   it "holds the address the payer has on record" do
     found = described_class.new(role: :subscriber, address_line1: "1 Example St", city: "Example",
                                 postal_code: "40000")
@@ -103,51 +87,5 @@ RSpec.describe EdiGem::Person do
     found = described_class.new(role: :subscriber, city: "Example")
 
     expect(found.inspect).to eq("#<EdiGem::Person subscriber address>")
-  end
-
-  describe "the SSN the payer holds" do
-    let(:found) { described_class.new(role: :subscriber, first_name: "TESTFIRST", ssn: "XXX-XX-1234") }
-
-    it "keeps only the last four, which compare and never read back" do
-      expect([found.ssn_last_four == EdiGem::LastFour.of("1234"), found.ssn_last_four.to_s])
-        .to eq([true, "#<EdiGem::LastFour>"])
-    end
-
-    it "is nil WHEN the payer sent none" do
-      expect(person.ssn_last_four).to be_nil
-    end
-
-    it "names the field, never its value" do
-      expect(found.inspect).to eq("#<EdiGem::Person subscriber first_name,ssn_last_four>")
-    end
-
-    [false, true].each do |revealed|
-      it "prints no digit of it WHEN EdiGem.reveal is #{revealed}" do
-        EdiGem.reveal = revealed
-
-        expect([found.inspect, PP.pp(found, +"")].join).to_not include("1234")
-      ensure
-        EdiGem.reveal = false
-      end
-    end
-
-    # Stedi's discovery answer, with the subscriber's SSN whole and a dependent's masked.
-    def answer_with_ssns
-      body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_discovery_complete.json")))
-      body["items"][0]["subscriber"]["ssn"] = "000001234"
-      body["items"][0]["dependent"] = { "firstName" => "TESTKID", "ssn" => "XXX-XX-4321" }
-      canned_body(body)
-    end
-
-    it "is read from each person of a discovery's answer, whole or masked" do
-      source, = stedi_answering(answer_with_ssns)
-      asked = EdiGem::Subscriber.new(first_name: "A", last_name: "B", date_of_birth: "19800101")
-      clinic = EdiGem::Provider.new(npi: "1999999984", organization_name: "Example Clinic")
-      inquiry = EdiGem::Inquiry::Discovery.new(subscriber: asked, provider: clinic, as_of: "20260901")
-      people = source.discovery(inquiry).found_plans.first.people
-
-      expect(people.map { |each| each.ssn_last_four == EdiGem::LastFour.of(each.dependent? ? "4321" : "1234") })
-        .to eq([true, true])
-    end
   end
 end
