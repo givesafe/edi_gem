@@ -4,6 +4,11 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- The S3 archive reads its keys from `AWS_ACCESS_KEY` and `AWS_SECRET_KEY`, the names the backend
+  already uses for its uploads (Danny, 2026-11-04), where it read `AWS_ACCESS_KEY_ID` and
+  `AWS_SECRET_ACCESS_KEY`. An environment with only the old names now gets no archive, and a send that
+  asks to archive raises `ArchiveNotConfigured`. `AWS_SESSION_TOKEN`, `AWS_REGION` and
+  `AWS_DEFAULT_REGION` are unchanged.
 - A send that asked to archive no longer loses the paid answer when the archive write fails
   (`ArchiveFailed`, for example S3 unreachable): `Responses#from` returns the Response unstored
   (`stored` nil, `archived?` false) with the failure as `Response#archive_failure`, for the caller

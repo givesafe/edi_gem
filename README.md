@@ -63,7 +63,7 @@ values: { portal_password: "..." })`), and `archive:` is where raw bodies are ke
 The archive defaults to `EdiGem::Archive.from_env`, which reads `EDI_ARCHIVE_TEMPLATE`:
 
 - `s3://bucket/edi/$CLEARINGHOUSE/$YYYYMM/$FEATURE/$DIRECTION` writes to S3, using
-  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and optionally `AWS_SESSION_TOKEN` and `AWS_REGION`.
+  `AWS_ACCESS_KEY`, `AWS_SECRET_KEY` and optionally `AWS_SESSION_TOKEN` and `AWS_REGION`.
 - `file:///var/edi/$YYYYMMDD/$FEATURE/$DIRECTION`, or a bare path, writes locally.
 
 The template must place `$DIRECTION`. The gem fills `$CLEARINGHOUSE`, `$FEATURE`, `$DIRECTION`,

@@ -3,7 +3,7 @@
 RSpec.describe EdiGem::Archive do
   describe ".from_env" do
     let(:credentials) do
-      { "AWS_ACCESS_KEY_ID" => "AKIA", "AWS_SECRET_ACCESS_KEY" => "secret" }
+      { "AWS_ACCESS_KEY" => "AKIA", "AWS_SECRET_KEY" => "secret" }
     end
 
     it "answers with nothing when the environment configures no archive" do

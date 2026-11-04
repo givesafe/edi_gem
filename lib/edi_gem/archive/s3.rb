@@ -9,7 +9,8 @@ module EdiGem
     # S3 over net/http with SigV4, adding no runtime dependency. Uses virtual-hosted
     # addressing, so bucket names containing a dot are refused.
     class S3 < Archive
-      CREDENTIAL_VARIABLES = %w[AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY].freeze
+      # The names the backend already keeps its AWS keys under, for its own uploads.
+      CREDENTIAL_VARIABLES = %w[AWS_ACCESS_KEY AWS_SECRET_KEY].freeze
 
       # The answers AWS calls transient or throttling, so ArchiveFailed#retryable? is true for them:
       # 500, 502, 503 and 504 (503 is also S3's SlowDown) and 429. Every other answer, a missing
@@ -45,8 +46,8 @@ module EdiGem
 
         new(template: template,
             region: env["AWS_REGION"] || env["AWS_DEFAULT_REGION"] || "us-east-1",
-            access_key_id: env.fetch("AWS_ACCESS_KEY_ID"),
-            secret_access_key: env.fetch("AWS_SECRET_ACCESS_KEY"),
+            access_key_id: env.fetch("AWS_ACCESS_KEY"),
+            secret_access_key: env.fetch("AWS_SECRET_KEY"),
             session_token: env["AWS_SESSION_TOKEN"])
       end
 
