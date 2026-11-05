@@ -207,8 +207,9 @@ payer refused the request as sent: a 42 whose follow-up is C, N or S, which Sted
 problem with the request, for Stedi support, and not as a payer that is down.
 `#our_setup_refused?` says the payer refused our setup, not the person: a 41 (our NPI, tax ID or
 portal credentials) or a T4 (the payer name or ID we sent) in the payer lane, as Stedi reads them.
-Its state stays `payer_silent`; the caller files it as ours. A 41 in the provider's lane is a
-refusal of our provider (`rejected`).
+Its state stays `payer_silent`, and `Finding` reads it as `our_fault`, as it does a 42 not to
+resubmit. A silence Stedi says to ask again is `payer_down`, and a 79 alone `payer_not_connected`.
+A 41 in the provider's lane is a refusal of our provider (`rejected`).
 
 ## What payers and Stedi return, and what the gem relies on (proposed)
 
@@ -518,6 +519,7 @@ plan.relationship                    # => :self
 | `plan_name`, `plan_number`, `group_number` | String or nil | as the payer names them; nil when the answer holds none |
 | `coverage_on(date)` | `Coverage::Finding` | what the plan's own lines say of that day: its `status` (`:active`, `:inactive`, `:non_covered`, or nil when they say nothing; not knowing is not a denial) and `code`, the status code |
 | `plan_begins_on`, `plan_ends_on` | Date or nil | the plan's own dates; nil when none, or not a real YYYYMMDD day; an end in the year 9999 (a payer's placeholder until the plan ends) is nil |
+| `rejections` | Array of `Rejection` | what this plan's payer refused of our provider (`responseProvider.aaaErrors`); `Finding.of_plan` reads it as `provider_refused` when no line decides; empty when none |
 | `relationship` | Symbol or nil | `:self` or `:dependent`, as the payer said; nil when it did not say, nobody was compared, or the payer refused the person |
 | `lines` | Array of `AnsweredPlan::Line` | `benefit_type`, `service_types`, `insurance_type`, `plan_name`, `in_network` (nil when the payer did not say); empty when none |
 

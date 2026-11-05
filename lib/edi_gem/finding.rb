@@ -14,10 +14,12 @@ module EdiGem
   #                     Not certainly someone else
   #   not_on_this_id    the person isn't on the payer's books under this ID. Not a denial
   #   provider_refused  the payer won't answer our provider. Nothing about the person
+  #   payer_down        the payer can't answer right now, and Stedi says to ask again
+  #   payer_not_connected  Stedi couldn't connect to the payer, and says not to ask again on its own
   #   no_answer         the payer was silent, couldn't process (V), sent no lines, or no line decides
   #   nothing_found     a discovery found no plan, which says nothing of whether the person is covered
-  #   our_fault         our request was refused at the transport or envelope, or for what we sent in
-  #                     it: we didn't ask properly
+  #   our_fault         our request was refused at the transport or envelope, for what we sent in
+  #                     it, or as sent (a 42 not to resubmit, our setup): we didn't ask properly
   #
   # Which refusal codes mean which is PersonRefusal::FINDINGS.
   #   pending           an asynchronous answer that hasn't arrived
@@ -26,7 +28,7 @@ module EdiGem
   # records one word can tell a plan that ended from one never covered.
   class Finding
     NAMES = %i[covered not_covered someone_else held_differently not_on_this_id provider_refused
-               no_answer nothing_found our_fault pending].freeze
+               payer_down payer_not_connected no_answer nothing_found our_fault pending].freeze
 
     # What a plan's own lines say (Coverage::Finding#status); cannot_process or no line is no answer.
     BY_COVERAGE = { active: :covered, inactive: :not_covered, non_covered: :not_covered }.freeze
@@ -37,6 +39,15 @@ module EdiGem
     # always about the person the plan names, whoever was asked.
     def self.of_coverage(coverage)
       new(BY_COVERAGE.fetch(coverage.status, :no_answer), code: coverage.code, line: coverage)
+    end
+
+    # A plan a discovery found (a FoundPlan or MedicalPlan), on the day.
+    def self.of_plan(plan, on:)
+      coverage = plan.coverage_on(on)
+      refusal = plan.rejections.find(&:about_provider?)
+      return new(:provider_refused, code: refusal.code) if refusal && coverage.status.nil?
+
+      of_coverage(coverage)
     end
 
     # A check's answer (`response`) about the person `identification` names, on the day.
@@ -63,7 +74,14 @@ module EdiGem
     end
 
     # A source can give the state with no refusal behind it.
-    def self.silent(response) = new(:no_answer, code: response.rejections.first&.code)
+    def self.silent(response)
+      code = response.rejections.first&.code
+      return new(:our_fault, code: code) if response.our_setup_refused? || response.resubmission_refused?
+      return new(:payer_down, code: code) if response.ask_again?
+      return new(:payer_not_connected, code: code) if response.not_connected?
+
+      new(:no_answer, code: code)
+    end
 
     def self.refused(response)
       refusal = response.provider_refusals.first

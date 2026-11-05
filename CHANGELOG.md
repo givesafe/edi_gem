@@ -4,6 +4,12 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- `Finding` names a payer's silence itself: `payer_down` when Stedi says to ask again (42, 80),
+  `payer_not_connected` for a 79 alone, and `our_fault` for our setup refused (41, T4) or a 42
+  not to resubmit (follow-up C, N or S). Each was `no_answer`, for the caller to tell apart.
+- `Finding.of_plan(plan, on:)` reads a discovery's found plan: its lines decide, and with none
+  deciding, its payer's refusal of our provider is `provider_refused`. `MedicalPlan#rejections`.
+
 - `Response#warning_codes`: the codes of Stedi's `warnings`, on a check and a discovery, for the
   caller to log (empty when none). Stedi: "a check can succeed while missing information you meant
   to include". None of them decides the answer.

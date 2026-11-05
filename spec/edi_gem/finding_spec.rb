@@ -77,10 +77,29 @@ RSpec.describe EdiGem::Finding do
       expect(checked(rejections: [refusal(:envelope, :input_errors)])).to be_our_fault
     end
 
-    it "is no_answer WHEN the payer is silent" do
-      finding = checked(rejections: [refusal(:payer, :payer_unavailable)])
+    {
+      "payer_down WHEN the payer can't answer right now" => [%i[payer payer_unavailable], :payer_down],
+      "payer_not_connected WHEN Stedi couldn't connect to the payer" => [%i[payer invalid_participant],
+                                                                         :payer_not_connected],
+      "our_fault WHEN the payer refuses our setup" => [%i[payer authorization_restricted], :our_fault],
+      "no_answer WHEN the payer refuses for another reason" => [%i[payer invalid_date_of_service], :no_answer]
+    }.each do |example, (refused, name)|
+      it "names the payer's silence #{example}" do
+        finding = checked(rejections: [refusal(*refused)])
 
-      expect([finding.name, finding.code]).to eq %i[no_answer payer_unavailable]
+        expect([finding.name, finding.code]).to eq [name, refused.last]
+      end
+    end
+
+    it "is our_fault WHEN the payer says not to send the request again" do
+      not_to_resend = EdiGem::Rejection.new(level: :payer, code: :payer_unavailable, followup: "C")
+
+      expect(checked(rejections: [not_to_resend])).to have_attributes(name: :our_fault, code: :payer_unavailable)
+    end
+
+    it "is payer_down WHEN Stedi couldn't connect but the payer also can't answer right now" do
+      expect(checked(rejections: [refusal(:payer, :invalid_participant), refusal(:payer, :payer_unavailable)]))
+        .to be_payer_down
     end
 
     it "is pending WHEN the answer hasn't arrived" do
@@ -126,7 +145,7 @@ RSpec.describe EdiGem::Finding do
 
     def finding_of(answer) = described_class.of_search(answer)
 
-    # A discovery with plans is read plan by plan (Finding.of_coverage), by the caller who chose them.
+    # A discovery with plans is read plan by plan (Finding.of_plan), by the caller who chose them.
     {
       "nothing_found WHEN the payer matched nobody" => [[], :nothing_found],
       "nothing_found WHEN the subscriber was not found" => [[%i[subscriber subscriber_not_found]], :nothing_found],
@@ -134,7 +153,7 @@ RSpec.describe EdiGem::Finding do
                                                                  :provider_refused],
       "our_fault WHEN the request was refused" => [[%i[envelope malformed_request]], :our_fault],
       "our_fault WHEN what we sent was refused" => [[%i[subscriber required_data_missing]], :our_fault],
-      "no_answer WHEN the payer did not answer" => [[%i[payer payer_unavailable]], :no_answer]
+      "payer_down WHEN the payer can't answer right now" => [[%i[payer payer_unavailable]], :payer_down]
     }.each do |example, (refused, name)|
       it "is #{example}" do
         answer = searched(rejections: refused.map { |args| refusal(*args) }, settled: true, handle: "h")
@@ -156,8 +175,8 @@ RSpec.describe EdiGem::Finding do
   end
 
   describe "a discovery plan's" do
-    def found(*benefits)
-      described_class.of_coverage(EdiGem::FoundPlan.new(benefits: benefits, people: []).coverage_on(day))
+    def found(*benefits, rejections: [])
+      described_class.of_plan(EdiGem::FoundPlan.new(benefits: benefits, people: [], rejections: rejections), on: day)
     end
 
     it "is covered WHEN its line is active" do
@@ -170,6 +189,15 @@ RSpec.describe EdiGem::Finding do
 
     it "is no_answer WHEN no line decides" do
       expect(found).to be_no_answer
+    end
+
+    it "is provider_refused WHEN no line decides and its payer refused our provider" do
+      expect(found(rejections: [refusal(:provider, :provider_not_on_file)]))
+        .to have_attributes(name: :provider_refused, code: :provider_not_on_file)
+    end
+
+    it "is covered WHEN its line is active, though its payer refused our provider" do
+      expect(found(line(:active, "1"), rejections: [refusal(:provider, :provider_not_on_file)])).to be_covered
     end
   end
 
