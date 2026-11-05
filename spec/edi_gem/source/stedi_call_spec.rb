@@ -531,6 +531,35 @@ RSpec.describe "calling Stedi" do
       expect { source.discovery(discovery_inquiry) }
         .to raise_error(EdiGem::Fault) { |fault| expect([fault.kind, fault.retryable?]).to eq([:vendor_error, false]) }
     end
+
+    # Stedi: "Stedi returns HTTP 502 with an ERROR status when it wasn't able to complete the
+    # insurance discovery check."
+    context "WHEN Stedi answers ERROR with HTTP 502" do
+      it "raises a vendor_error, sending the search once" do
+        source, transport = stedi_answering(canned("stedi_discovery_error", status: 502))
+
+        expect { source.discovery(discovery_inquiry) }.to raise_error(EdiGem::Fault) { |fault|
+          expect([fault.kind, transport.paths.size]).to eq([:vendor_error, 1])
+        }
+      end
+
+      it "reads the payer's AAA refusals as the answer WHEN the body holds them" do
+        body = JSON.parse(File.read(File.join(CannedSource::FIXTURES, "stedi_discovery_error.json")))
+                   .merge("errors" => [{ "code" => "42", "location" => "Loop 2100A",
+                                         "followupAction" => "Please Resubmit Original Transaction" }])
+        source, = stedi_answering(canned_body(body, status: 502))
+        response = source.discovery(discovery_inquiry)
+
+        expect([response.rejections.map(&:code), response.ask_again?]).to eq([[:payer_unavailable], true])
+      end
+
+      it "is the 502's own fault WHEN the body isn't JSON" do
+        source, = stedi_answering(CannedSource::Answer.new(code: "502", headers: {}, body: "<html>Bad Gateway</html>"))
+
+        expect { source.discovery(discovery_inquiry) }
+          .to raise_error(EdiGem::Fault) { |fault| expect(fault.kind).to eq(:vendor_unavailable) }
+      end
+    end
   end
 
   describe "#resolve" do

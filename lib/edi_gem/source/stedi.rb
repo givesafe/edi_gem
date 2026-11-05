@@ -131,8 +131,14 @@ module EdiGem
         Request.new(inquiry, payer_code: payer_code, credential: @credential, policy: @policy)
       end
 
+      # A failing status let through for its body (Policy#answer_in_status?) with no JSON in it is
+      # the Fault its status means.
       def parse(exchange)
         Document::Json.parse(exchange.response_body)
+      rescue UnreadableBody
+        raise unless exchange.failing_status?
+
+        raise Fault.of_status(exchange.status, policy: @policy, path: URI(exchange.url).path)
       end
 
       # The caller's idempotency key overrides the one derived from the body. `key` is the

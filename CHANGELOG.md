@@ -4,6 +4,10 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- A discovery Stedi couldn't complete (`ERROR`, HTTP 502) is read from its body, where the 502 alone
+  made it `vendor_unavailable`, retried automatically. With AAA refusals in its `errors` they are the
+  answer, read as a success's are; without them it is `vendor_error`, sent once and filed. A 502 whose
+  body isn't JSON is still `vendor_unavailable`. Applies to the discovery and its results.
 - A discovery's found plan keeps its payer's refusal of our provider
   (`items[].subscriber.responseProvider.aaaErrors`, and `dependent`'s) as `FoundPlan#rejections`, where
   it was not read. It is not a refusal of the whole search, and the same refusal repeated in the

@@ -88,6 +88,10 @@ sources:
         throttle:
           per_second: 1
           burst: 2
+        # Stedi answers a discovery it couldn't complete with an ERROR body under HTTP 502.
+        errors:
+          answer_in_status:
+            - "502"
         retry:
           retry_on:
             - unreachable
@@ -104,6 +108,9 @@ sources:
         throttle:
           per_second: 1
           burst: 2
+        errors:
+          answer_in_status:
+            - "502"
       payer_search:
         path: /2024-04-01/payers/search
 

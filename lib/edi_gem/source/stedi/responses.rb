@@ -9,8 +9,8 @@ module EdiGem
         # A discovery's status. COMPLETE with no items is a final answer: no coverage was found.
         PENDING = "PENDING"
         COMPLETE = "COMPLETE"
-        # The vendor gave up on the request. Nothing in it is an answer, so it is a Fault, raised
-        # after the body is filed.
+        # The vendor gave up on the request, with HTTP 502. Without AAA refusals nothing in it is an
+        # answer, so it is a Fault, raised after the body is filed.
         ERROR = "ERROR"
         # Where a batch results item carries the identifier it was sent with.
         IDENTIFIER = "submitterTransactionIdentifier"
@@ -47,14 +47,14 @@ module EdiGem
         # `archive_failure` for the caller to report. Nothing here retries the write.
         def from(exchange, schema:, feature:, handle: nil, body: nil, archive: nil)
           payload = Payload.new(body: exchange.response_body, dialect: :json)
-          reading = read(exchange) { Reading.new(document: payload.document, schema: Schema.fetch(schema)) }
           status = body && body["status"]
+          reading = read(exchange, status) { Reading.new(document: payload.document, schema: Schema.fetch(schema)) }
           stored, archive_failure = filed(exchange, feature, archive)
-          refuse_error(exchange, status)
+          refuse_error(exchange, status, reading)
 
           Response.new(**reading.parts, payload: payload, exchanges: [exchange],
                                         handle: handle, state: (:pending if status == PENDING),
-                                        settled: status.nil? || status == COMPLETE,
+                                        settled: [nil, COMPLETE, ERROR].include?(status),
                                         stored: stored, archive_failure: archive_failure,
                                         directory: @directory)
         end
@@ -91,7 +91,7 @@ module EdiGem
         # as a success's are: a 400 with an AAA 79 is a payer Stedi couldn't connect to. Without one
         # it is the Fault its status means, as the transport raises it, and nothing is filed. A body
         # that isn't JSON holds none.
-        def read(exchange)
+        def read(exchange, status)
           return yield unless exchange.failing_status?
 
           reading = begin
@@ -99,17 +99,21 @@ module EdiGem
           rescue UnreadableBody
             nil
           end
-          return reading if reading&.rejections&.any?(&:aaa?)
+          return reading if status == ERROR || refused_by_aaa?(reading)
 
           raise status_fault(exchange)
         end
+
+        def refused_by_aaa?(reading) = reading&.rejections&.any?(&:aaa?)
 
         def status_fault(exchange)
           Fault.of_status(exchange.status, policy: @policy, path: URI(exchange.url).path)
         end
 
-        def refuse_error(exchange, status)
-          raise Fault.new(kind: :vendor_error, source: @clearinghouse, status: exchange.status) if status == ERROR
+        def refuse_error(exchange, status, reading)
+          return unless status == ERROR && reading.rejections.none?(&:aaa?)
+
+          raise Fault.new(kind: :vendor_error, source: @clearinghouse, status: exchange.status)
         end
 
         # Neither the stem nor the identifier is named in the error: both are identifiers.
