@@ -83,6 +83,13 @@ module EdiGem
     # decode to a list.
     REPETITION = "^"
 
+    # Stedi's warnings, by code alone: "a check can succeed while missing information you meant to
+    # include".
+    WARNING_CODES = lambda do |value|
+      codes = Array(value).filter_map { |warning| warning["code"] }
+      codes unless codes.empty?
+    end
+
     CODES = lambda do |value|
       return nil if value.nil? || value == ""
 
@@ -128,8 +135,8 @@ module EdiGem
     PRIMARY_PAYER_NAME = ->(entities) { PRIMARY_PAYER_OF.call(entities)&.fetch("entityName", nil) }
 
     REGISTRY = { eb01_status: EB01_STATUS, eb01_status_code: EB01_STATUS_CODE, eb01_benefit: EB01_BENEFIT,
-                 aaa03: REJECT_REASON, yes_no: YES_NO, codes: CODES, rd8_start: RD8_START, rd8_end: RD8_END,
-                 span_begin: SPAN_BEGIN, span_end: SPAN_END,
+                 aaa03: REJECT_REASON, yes_no: YES_NO, codes: CODES, warning_codes: WARNING_CODES,
+                 rd8_start: RD8_START, rd8_end: RD8_END, span_begin: SPAN_BEGIN, span_end: SPAN_END,
                  primary_payer_code: PRIMARY_PAYER_CODE, primary_payer_name: PRIMARY_PAYER_NAME }.freeze
 
     DAY_FORMAT = "%Y%m%d"

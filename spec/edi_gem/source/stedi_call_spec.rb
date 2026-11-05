@@ -84,6 +84,10 @@ RSpec.describe "calling Stedi" do
       expect(response.state).to eq(:complete)
     end
 
+    it "has no warning codes WHEN Stedi sent none" do
+      expect(response.warning_codes).to eq([])
+    end
+
     it "reads the one active benefit out of the several the payer listed" do
       expect(response.active_benefits.map(&:plan_name)).to eq(["MEDICAID MANAGED CARE"])
     end
@@ -523,6 +527,14 @@ RSpec.describe "calling Stedi" do
 
       expect([plan.person.first_name, plan.person.date_of_birth, plan.person.address.city, plan.member_id])
         .to eq(%w[Testfirst 20100101 Example MOCK00001])
+    end
+
+    it "keeps Stedi's warning codes" do
+      body = { "status" => "COMPLETE", "items" => [],
+               "warnings" => [{ "code" => "MOCK", "description" => "mock warning" }] }
+      source, = stedi_answering(canned_body(body))
+
+      expect(source.discovery(discovery_inquiry).warning_codes).to eq(%w[MOCK])
     end
 
     it "raises a vendor_error, not a pending answer, when the vendor says ERROR" do

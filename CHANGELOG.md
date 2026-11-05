@@ -4,6 +4,9 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- `Response#warning_codes`: the codes of Stedi's `warnings`, on a check and a discovery, for the
+  caller to log (empty when none). Stedi: "a check can succeed while missing information you meant
+  to include". None of them decides the answer.
 - When the person's lanes hold several refusals, the one that decides no longer depends on their
   order: a death before the day asked, then the person held differently, then not on this ID, then
   what we sent. [15, 72] and [72, 15] both read `not_on_this_id`, where the first read `our_fault`.

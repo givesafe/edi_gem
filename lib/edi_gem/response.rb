@@ -65,6 +65,11 @@ module EdiGem
       @details[:trace_id]
     end
 
+    # Stedi's warning codes on the answer, for the caller to log; none decides the answer.
+    def warning_codes
+      @details.fetch(:warning_codes, [])
+    end
+
     def state
       @state ||= read_state.name
     end

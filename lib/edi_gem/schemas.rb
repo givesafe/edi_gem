@@ -168,6 +168,7 @@ EdiGem::Schema.define(:stedi) do
     field :submitter_id, from: "meta.submitterId"
     field :control_number, from: "controlNumber"
     field :search_id, from: "eligibilitySearchId"
+    field :warning_codes, from: "warnings", codec: :warning_codes
   end
 
   # The flat errors[] repeats the nested AAAs without their lane. Read as a fallback: only what
@@ -280,5 +281,6 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :trace_id, from: "meta.traceId"
     field :discovery_id, from: "discoveryId"
     field :coverages_found, from: "coveragesFound"
+    field :warning_codes, from: "warnings", codec: :warning_codes
   end
 end
