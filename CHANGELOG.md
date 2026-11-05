@@ -4,6 +4,10 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- A discovery's found plan keeps its payer's refusal of our provider
+  (`items[].subscriber.responseProvider.aaaErrors`, and `dependent`'s) as `FoundPlan#rejections`, where
+  it was not read. It is not a refusal of the whole search, and the same refusal repeated in the
+  top-level `errors` is not counted twice. One payer refusing our provider says nothing of the others.
 - `Finding.of_search` reads a discovery that found no plan as the new `nothing_found`, where it read
   `not_covered` (Danny, 2026-11-05). Stedi: a discovery "can return zero matches for a patient even
   when they have active coverage", so finding none says nothing about whether they are covered.

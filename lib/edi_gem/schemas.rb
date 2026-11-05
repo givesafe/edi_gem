@@ -254,8 +254,18 @@ EdiGem::Schema.define(:stedi_discovery) do
     field :line_ends_on, from: "benefitsDateInformation", codec: :span_end
   end
 
-  # Stedi's discovery answer has only the flat list. Its `location` ("Loop 2100C") names the lane,
-  # so a subscriber not found reads as not identified rather than as a refused request.
+  # A found plan's payer refusing our provider, on that plan alone.
+  %w[items[].subscriber items[].dependent].each do |address|
+    rejection "#{address}.responseProvider.aaaErrors[]", level: :provider do
+      field :code, from: "code", codec: :aaa03
+      field :reason_code, from: "code"
+      field :description, from: "description"
+      field :followup, from: "followupAction"
+    end
+  end
+
+  # The flat list's `location` ("Loop 2100C") names the lane, so a subscriber not found reads as
+  # not identified rather than as a refused request.
   rejection "errors[]", level: :envelope, fallback: true do
     field :code, from: "code", codec: :aaa03
     field :reason_code, from: "code"

@@ -163,6 +163,40 @@ RSpec.describe EdiGem::Reading do
     end
   end
 
+  # A discovery asks many payers. One refusing our provider says nothing of the others.
+  describe "a found plan whose payer refused our provider" do
+    let(:refusal) { { "code" => "43", "description" => "Invalid/Missing Provider Identification" } }
+    let(:body) do
+      { "items" => [
+        { "payer" => { "payorIdentification" => "14163" },
+          "subscriber" => { "responseProvider" => { "aaaErrors" => [refusal] } } },
+        { "payer" => { "payorIdentification" => "25463" }, "benefitsInformation" => [{ "code" => "1" }] }
+      ] }
+    end
+
+    def reading(answer)
+      described_class.new(document: EdiGem::Document::Json.new(answer), schema: EdiGem::Schema.fetch(:stedi_discovery))
+    end
+
+    it "keeps the refusal on that plan alone" do
+      expect(reading(body).found_plans.map { |plan| plan.rejections.map(&:level) }).to eq([[:provider], []])
+    end
+
+    it "is no refusal of the whole answer" do
+      expect(reading(body).rejections).to be_empty
+    end
+
+    it "is no refusal of the whole answer WHEN the flat list repeats it" do
+      expect(reading(body.merge("errors" => [refusal])).rejections).to be_empty
+    end
+
+    it "keeps a dependent's plan refusal on that plan" do
+      body = { "items" => [{ "dependent" => { "responseProvider" => { "aaaErrors" => [refusal] } } }] }
+
+      expect(reading(body).found_plans.first.rejections.map(&:code)).to eq([:provider_not_on_file])
+    end
+  end
+
   # One key holds a single date on one coverage and a range on the next, and the begin and end a
   # payer sends of their own win over either.
   describe "a plan's dates" do

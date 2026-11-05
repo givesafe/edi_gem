@@ -22,25 +22,26 @@ module EdiGem
     end
 
     # Lane addresses first, then only what a fallback (flattened) list adds beyond them, so no
-    # refusal is counted twice or moved to the wrong lane.
+    # refusal is counted twice or moved to the wrong lane. A found plan's own refusals are that
+    # plan's, not the answer's.
     def rejections
-      lanes, fallbacks = @schema.rejections.partition { |mapping| !mapping.fallback? }
-      found = lanes.flat_map { |mapping| for_lane(mapping) }
-      found + fallbacks.flat_map { |mapping| for_lane(mapping) }
-                       .reject { |rejection| found.any? { |kept| kept.same_refusal_as?(rejection) } }
+      found = placed_rejections.map(&:last)
+      answers = placed_rejections.filter_map { |at, rejection| rejection unless in_a_plan?(at) }
+      answers + fallback_rejections.reject { |rejection| found.any? { |kept| kept.same_refusal_as?(rejection) } }
     end
 
     # One Person per role and position: an X12 person is spread over NM1, DMG and INS at one
     # level, so the fragments one role finds at one position are one person. Subscriber first.
     def people
-      people_from(person_fragments.reject { |(_, at), _| plan_positions.any? { |plan| under?(at, plan) } })
+      people_from(person_fragments.reject { |(_, at), _| in_a_plan?(at) })
     end
 
     # One FoundPlan per coverage a discovery found, with only the benefits and people under it.
     def found_plans
       plan_positions.map do |plan|
         FoundPlan.new(benefits: placed_benefits.filter_map { |at, benefit| benefit if under?(at, plan) },
-                      people: people_from(person_fragments.select { |(_, at), _| under?(at, plan) }))
+                      people: people_from(person_fragments.select { |(_, at), _| under?(at, plan) }),
+                      rejections: placed_rejections.filter_map { |at, rejection| rejection if under?(at, plan) })
       end
     end
 
@@ -65,6 +66,22 @@ module EdiGem
     end
 
     def under?(at, place) = at.first(place.length) == place
+
+    def in_a_plan?(at) = plan_positions.any? { |plan| under?(at, plan) }
+
+    def placed_rejections
+      @placed_rejections ||= @schema.rejections.reject(&:fallback?).flat_map do |mapping|
+        placed(mapping).map { |at, attributes| [at, Rejection.new(**attributes, level: mapping.level)] }
+      end
+    end
+
+    def fallback_rejections
+      @schema.rejections.select(&:fallback?).flat_map do |mapping|
+        build(mapping) do |attrs|
+          Rejection.new(**attrs, level: Rejection.level_from(attrs[:location]) || mapping.level)
+        end
+      end
+    end
 
     def people_from(fragments)
       fragments.group_by(&:first)
@@ -102,14 +119,6 @@ module EdiGem
       fragments.select { |place, _| under?(at, place) }
                .group_by { |place, _| place.length }.sort.flat_map(&:last)
                .reduce({}) { |found, (_, attributes)| found.merge(attributes) }
-    end
-
-    # A fallback entry takes its level from the loop it names, else the mapping's level.
-    def for_lane(mapping)
-      build(mapping) do |attrs|
-        level = mapping.fallback? && Rejection.level_from(attrs[:location])
-        Rejection.new(**attrs, level: level || mapping.level)
-      end
     end
 
     def build(mapping)

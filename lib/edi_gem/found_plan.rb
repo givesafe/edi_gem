@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 module EdiGem
-  # One coverage an insurance discovery found: its payer, its benefit lines, and the people on it.
+  # One coverage an insurance discovery found: its payer, its benefit lines, the people on it, and
+  # what its payer refused of our provider.
   # A discovery can find several, each at its own payer and about its own people, so each is read
   # apart and nothing of one reaches another.
   #
@@ -11,11 +12,12 @@ module EdiGem
     include Concealed
     include PlanFields
 
-    attr_reader :benefits, :people
+    attr_reader :benefits, :people, :rejections
 
-    def initialize(benefits:, people:)
+    def initialize(benefits:, people:, rejections: [])
       @benefits = benefits
       @people = people
+      @rejections = rejections
     end
 
     def payer_code = self[:payer_code]
