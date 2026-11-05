@@ -6,15 +6,16 @@ module EdiGem
   # the moment (a check with the person there, a recheck without them, a discovery).
   #
   #   covered           an active line (EB01 1-5) covers the person on the day
-  #   not_covered       an inactive line (6-8), not covered (I), the day outside the plan's dates, or an
-  #                     answer with no lines: not covered on this plan. They may have another
+  #   not_covered       an inactive line (6-8), not covered (I), the day outside the plan's dates, or the
+  #                     person's date of death before the day: not covered on this plan. They may have another
   #   someone_else      the answer is about a person who isn't the one asked (our name and birth date
   #                     comparison): the ID is real and someone's, and says nothing of our person
   #   held_differently  the payer found the ID but holds the person under another birth date or name.
   #                     Not certainly someone else
   #   not_on_this_id    the person isn't on the payer's books under this ID. Not a denial
   #   provider_refused  the payer won't answer our provider. Nothing about the person
-  #   no_answer         the payer was silent, couldn't process (V), or no line decides
+  #   no_answer         the payer was silent, couldn't process (V), sent no lines, or no line decides
+  #   nothing_found     a discovery found no plan, which says nothing of whether the person is covered
   #   our_fault         our request was refused at the transport or envelope, or for what we sent in
   #                     it: we didn't ask properly
   #
@@ -25,7 +26,7 @@ module EdiGem
   # records one word can tell a plan that ended from one never covered.
   class Finding
     NAMES = %i[covered not_covered someone_else held_differently not_on_this_id provider_refused
-               no_answer our_fault pending].freeze
+               no_answer nothing_found our_fault pending].freeze
 
     # What a plan's own lines say (Coverage::Finding#status); cannot_process or no line is no answer.
     BY_COVERAGE = { active: :covered, inactive: :not_covered, non_covered: :not_covered }.freeze
@@ -57,7 +58,7 @@ module EdiGem
       when :pending then new(:pending)
       when :rejected then refused(response)
       when :payer_silent then silent(response)
-      else new(:not_covered)
+      else new(:nothing_found)
       end
     end
 
@@ -79,14 +80,17 @@ module EdiGem
 
     def self.answered(response, identification, day)
       return new(:someone_else) if identification.mismatched?
-      if response.state == :no_coverage
-        return new(:not_covered, code: PersonRefusal.finding_among(response.rejections)&.last)
-      end
+      return person_not_covered(response) if response.state == :no_coverage
 
       of_coverage(response.coverage_on(day))
     end
 
-    private_class_method :silent, :refused, :not_identified, :answered
+    def self.person_not_covered(response)
+      name, code = PersonRefusal.finding_among(response.rejections)
+      new(name || :no_answer, code: code)
+    end
+
+    private_class_method :silent, :refused, :not_identified, :answered, :person_not_covered
 
     # `code` is the EB01 status code of the line that decided, the refusal's reason (a
     # Codec::REJECT_REASON name, or the raw code the codec didn't name), or nil. `line` is the plan's

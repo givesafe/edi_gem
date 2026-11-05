@@ -4,6 +4,12 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- `Finding.of_search` reads a discovery that found no plan as the new `nothing_found`, where it read
+  `not_covered` (Danny, 2026-11-05). Stedi: a discovery "can return zero matches for a patient even
+  when they have active coverage", so finding none says nothing about whether they are covered.
+- `Finding.of_check` reads a settled answer with no lines and no refusal as `no_answer`, where it read
+  `not_covered`: nothing in it says the person isn't covered. A death before the day asked (AAA 61) is
+  still `not_covered`.
 - The S3 archive reads its keys from `AWS_ACCESS_KEY` and `AWS_SECRET_KEY`, the names the backend
   already uses for its uploads (Danny, 2026-11-04), where it read `AWS_ACCESS_KEY_ID` and
   `AWS_SECRET_ACCESS_KEY`. An environment with only the old names now gets no archive, and a send that

@@ -39,8 +39,8 @@ RSpec.describe EdiGem::Finding do
       end
     end
 
-    it "is not_covered WHEN the payer answered with no lines" do
-      expect(checked(settled: true, handle: "h")).to have_attributes(name: :not_covered, code: nil)
+    it "is no_answer WHEN the payer answered with no lines and no refusal" do
+      expect(checked(settled: true, handle: "h")).to have_attributes(name: :no_answer, code: nil)
     end
 
     it "is someone_else WHEN the answer is about another person, however it says they are covered" do
@@ -128,8 +128,8 @@ RSpec.describe EdiGem::Finding do
 
     # A discovery with plans is read plan by plan (Finding.of_coverage), by the caller who chose them.
     {
-      "not_covered WHEN the payer matched nobody" => [[], :not_covered],
-      "not_covered WHEN the subscriber was not found" => [[%i[subscriber subscriber_not_found]], :not_covered],
+      "nothing_found WHEN the payer matched nobody" => [[], :nothing_found],
+      "nothing_found WHEN the subscriber was not found" => [[%i[subscriber subscriber_not_found]], :nothing_found],
       "provider_refused WHEN the payer refused our provider" => [[%i[provider provider_not_on_file]],
                                                                  :provider_refused],
       "our_fault WHEN the request was refused" => [[%i[envelope malformed_request]], :our_fault],
