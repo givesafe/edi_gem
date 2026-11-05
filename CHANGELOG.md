@@ -4,6 +4,9 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- When the person's lanes hold several refusals, the one that decides no longer depends on their
+  order: a death before the day asked, then the person held differently, then not on this ID, then
+  what we sent. [15, 72] and [72, 15] both read `not_on_this_id`, where the first read `our_fault`.
 - A payer's refusal for want of the subscriber's gender (AAA 74) is `our_fault`, where it decided
   nothing and the answer read `no_answer`. Stedi: "The payer requires the subscriber's gender code";
   the request is ours to correct.

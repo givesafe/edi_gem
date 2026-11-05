@@ -21,6 +21,20 @@ RSpec.describe EdiGem::PersonRefusal do
   end
 
   describe ".refusal_among" do
+    it "is the same refusal whatever order the payer sent them in" do
+      missing = refused(:subscriber, :required_data_missing)
+      invalid = refused(:subscriber, :member_id_invalid)
+
+      expect([described_class.refusal_among([missing, invalid]), described_class.refusal_among([invalid, missing])])
+        .to eq([invalid, invalid])
+    end
+
+    it "is the death before the day asked over any other" do
+      death = refused(:subscriber, :date_of_death_conflict)
+
+      expect(described_class.refusal_among([refused(:subscriber, :name_mismatch), death])).to be(death)
+    end
+
     it "is the first refusal in the person's lanes that FINDINGS reads" do
       required = refused(:dependent, :dependent_id_required)
 

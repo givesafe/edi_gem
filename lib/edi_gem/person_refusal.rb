@@ -5,10 +5,15 @@ module EdiGem
   module PersonRefusal
     LEVELS = %i[subscriber dependent].freeze
 
-    # The first refusal in the person's lanes that FINDINGS reads, or nil. Response::State reads it
-    # to tell which state an answer is in, and which refusal decided it.
+    # Which finding decides when the person's lanes hold several, whatever their order: a death,
+    # then a refusal naming what the CTP can correct about the person, then what we sent.
+    PRECEDENCE = %i[not_covered held_differently not_on_this_id our_fault].freeze
+
+    # The refusal in the person's lanes that FINDINGS reads and PRECEDENCE puts first, or nil.
+    # Response::State reads it to tell which state an answer is in, and which refusal decided it.
     def self.refusal_among(rejections)
-      rejections.find { |rejection| LEVELS.include?(rejection.level) && FINDINGS.key?(rejection.code) }
+      rejections.select { |rejection| LEVELS.include?(rejection.level) && FINDINGS.key?(rejection.code) }
+                .min_by { |rejection| PRECEDENCE.index(FINDINGS[rejection.code]) }
     end
 
     # That refusal as [what it found, code], or nil.
