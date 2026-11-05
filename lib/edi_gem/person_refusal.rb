@@ -23,8 +23,8 @@ module EdiGem
     #                     more than one match (76, 68), or not in this group or plan (78)
     #   our_fault         what we sent: data missing (15), input errors (33), the day asked (56, 57, 62,
     #                     63), a birth date missing or malformed (58) or after the day asked (60), or a
-    #                     dependent identifier the payer needs (64, as Stedi reads it). Fixed by us, not
-    #                     by asking again
+    #                     dependent identifier the payer needs (64, as Stedi reads it), or a gender the
+    #                     payer needs (74). Fixed by us, not by asking again
     #   not_covered       the person's date of death is before the day asked (61)
     # A code outside the table leaves the answer to its other refusals and lines.
     FINDINGS = {
@@ -35,7 +35,7 @@ module EdiGem
       required_data_missing: :our_fault, input_errors: :our_fault,
       invalid_date_of_service: :our_fault, date_out_of_range: :our_fault,
       invalid_date_of_birth: :our_fault, birth_date_after_day_asked: :our_fault,
-      dependent_id_required: :our_fault,
+      dependent_id_required: :our_fault, gender_missing: :our_fault,
       date_of_death_conflict: :not_covered
     }.freeze
   end

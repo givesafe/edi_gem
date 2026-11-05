@@ -4,6 +4,9 @@
 
 The caller contract for each is in the README's "V1 reference".
 
+- A payer's refusal for want of the subscriber's gender (AAA 74) is `our_fault`, where it decided
+  nothing and the answer read `no_answer`. Stedi: "The payer requires the subscriber's gender code";
+  the request is ours to correct.
 - A discovery Stedi couldn't complete (`ERROR`, HTTP 502) is read from its body, where the 502 alone
   made it `vendor_unavailable`, retried automatically. With AAA refusals in its `errors` they are the
   answer, read as a success's are; without them it is `vendor_error`, sent once and filed. A 502 whose

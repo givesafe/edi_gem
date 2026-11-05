@@ -217,7 +217,7 @@ RSpec.describe EdiGem::Response do
 
     it "says the request was refused as sent, and not to ask again, WHEN the person's lane says 42 with follow-up S" do
       refused = EdiGem::Rejection.new(level: :subscriber, code: :payer_unavailable, reason_code: "42", followup: "S")
-      response = described_class.new(rejections: [rejection(:subscriber, :gender_missing), refused])
+      response = described_class.new(rejections: [rejection(:subscriber, :out_of_network), refused])
 
       expect([response.resubmission_refused?, response.ask_again?, response.deciding_rejection])
         .to eq([true, false, refused])
@@ -240,7 +240,7 @@ RSpec.describe EdiGem::Response do
     it "is the person's refusal the state read, not a refusal listed ahead of it that decides nothing" do
       required = rejection(:subscriber, :required_data_missing)
 
-      expect(deciding(rejection(:subscriber, :gender_missing), required)).to be(required)
+      expect(deciding(rejection(:subscriber, :out_of_network), required)).to be(required)
     end
 
     it "is a refusal of our provider ahead of one of the request" do
@@ -292,9 +292,9 @@ RSpec.describe EdiGem::Response do
     end
 
     it "is the first refusal when no lane reads any" do
-      first = rejection(:subscriber, :gender_missing)
+      first = rejection(:subscriber, :out_of_network)
 
-      expect(deciding(first, rejection(:dependent, :gender_missing), benefits: [benefit(:active)])).to be(first)
+      expect(deciding(first, rejection(:dependent, :out_of_network), benefits: [benefit(:active)])).to be(first)
     end
 
     it "is nil when nothing was refused" do
@@ -307,7 +307,7 @@ RSpec.describe EdiGem::Response do
       refused = EdiGem::Rejection.new(level: :subscriber, code: :date_out_of_range, reason_code: "62",
                                       description: "free text", resolution: "free text")
 
-      expect(described_class.new(rejections: [rejection(:subscriber, :gender_missing), refused]).error_summary)
+      expect(described_class.new(rejections: [rejection(:subscriber, :out_of_network), refused]).error_summary)
         .to eq("AAA 62 at subscriber")
     end
 

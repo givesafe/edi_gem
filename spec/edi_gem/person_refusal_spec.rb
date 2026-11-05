@@ -10,6 +10,10 @@ RSpec.describe EdiGem::PersonRefusal do
         .to eq(%i[our_fault our_fault])
     end
 
+    it "reads a gender the payer needs as what we sent, as Stedi says to correct and resubmit" do
+      expect(described_class::FINDINGS[:gender_missing]).to eq(:our_fault)
+    end
+
     it "reads a birth date missing or malformed as what we sent, and one held differently as the payer's" do
       expect(described_class::FINDINGS.values_at(:invalid_date_of_birth, :date_of_birth_mismatch))
         .to eq(%i[our_fault held_differently])
@@ -20,7 +24,7 @@ RSpec.describe EdiGem::PersonRefusal do
     it "is the first refusal in the person's lanes that FINDINGS reads" do
       required = refused(:dependent, :dependent_id_required)
 
-      expect(described_class.refusal_among([refused(:subscriber, :gender_missing), required])).to be(required)
+      expect(described_class.refusal_among([refused(:subscriber, :out_of_network), required])).to be(required)
     end
   end
 end
